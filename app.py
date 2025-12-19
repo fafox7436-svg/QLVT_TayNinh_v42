@@ -41,18 +41,18 @@ def load_data():
     req_cols = ['Thời_Gian_Báo', 'Đơn_Vị', 'Loại_VT', 'Tên_Vật_Tư', 'Nhà_CC', 'Chủng_Loại', 'Số_Lượng', 'Lý_Do', 'Trạng_Thái', 'Thời_Gian_Bù']
     
     try:
-        # Đọc dữ liệu từ Google Sheets (Yêu cầu cấu hình secrets)
+        # Thêm tham số spreadsheet để chỉ định rõ file nếu cần
         inv = conn.read(worksheet="Inventory", ttl=0)
         req = conn.read(worksheet="Requests", ttl=0)
-    except Exception:
-        # Nếu không kết nối được hoặc sheet trống, tạo mới
+        
+        # Nếu sheet tồn tại nhưng rỗng, gán lại cột chuẩn
+        if inv.empty: inv = pd.DataFrame(columns=inv_cols)
+        if req.empty: req = pd.DataFrame(columns=req_cols)
+    except Exception as e:
+        st.error(f"Lỗi kết nối Sheet: {e}. Vui lòng kiểm tra tên tab Inventory và Requests.")
         inv = pd.DataFrame(columns=inv_cols)
         req = pd.DataFrame(columns=req_cols)
-        
-    for df in [inv, req]:
-        for col in df.columns:
-            if df[col].dtype == 'object': 
-                df[col] = df[col].astype(str).str.strip()
+    
     return inv.fillna(""), req.fillna("")
 
 if 'inventory' not in st.session_state:
@@ -292,3 +292,4 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
