@@ -216,19 +216,20 @@ elif menu == "📥 Nhập Kho":
                         'Thoi_Gian_Tao': now, 'Thoi_Gian_Cap_Phat': '---'
                     })
                 confirm_dialog("nhap", pd.DataFrame(new_rows))
-    with t2:
-       # Tạo file mẫu Nhập kho
+   with t2:
+        # Tạo file mẫu Nhập kho
         mau_nhap = pd.DataFrame(columns=['Số_Lượng', 'Năm_SX', 'Loại_VT', 'Mã_TB', 'Nhà_CC', 'Nguồn_Nhap'])
-        mau_nhap.loc[0] = [10, 2024, "Công tơ", "Vinasino-VSE11", "Vinasino", "EVNSPC"]
+        # Thêm một dòng ví dụ để người dùng dễ hiểu
+        mau_nhap.loc[0] = [10, 2025, "Công tơ", "VSE11", "Vinasino", "EVNSPC"]
         
         st.download_button(
             label="📥 Tải file mẫu Nhập Kho (.xlsx)",
             data=get_sample_excel(mau_nhap),
             file_name="Mau_Nhap_Kho.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ) 
+        )
         
-        f = st.file_uploader("Nạp Excel Nhập (Cần cột: Số_Lượng, Năm_SX, Loại_VT, Mã_TB, Nhà_CC, Nguồn_Nhap)", type=["xlsx"])
+        f = st.file_uploader("Nạp Excel Nhập (Cần đúng các cột trong file mẫu)", type=["xlsx"])
         if f and st.button("🚀 Nạp Excel"):
             df_ex = pd.read_excel(f)
             now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
@@ -264,7 +265,6 @@ elif menu == "🚚 Cấp Phát":
                 else:
                     confirm_dialog("cap_phat", pd.DataFrame([{'Từ_Kho': tu_k, 'Mã_TB': m_c, 'Số_Lượng': sl_c, 'Đến_Đơn_Vị': den}]))
     with t2:
-        with t2:
         # Tạo file mẫu Cấp phát
         mau_cap = pd.DataFrame(columns=['Từ_Kho', 'Mã_TB', 'Số_Lượng', 'Đến_Đơn_Vị'])
         mau_cap.loc[0] = [CO_SO[0], "VSE11", 5, DANH_SACH_14_DOI[0]]
@@ -276,10 +276,9 @@ elif menu == "🚚 Cấp Phát":
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         
-        f_c = st.file_uploader("Nạp Excel Cấp (Cần cột: Từ_Kho, Mã_TB, Số_Lượng, Đến_Đơn_Vị)", type=["xlsx"])
+        f_c = st.file_uploader("Nạp Excel Cấp (Cần đúng các cột trong file mẫu)", type=["xlsx"])
         if f_c and st.button("🚀 Nạp Excel Cấp"):
             confirm_dialog("cap_phat", pd.read_excel(f_c))
-
 # D. DUYỆT BÁO HỎNG (ADMIN)
 elif menu == "🚨 Duyệt Báo Hỏng":
     st.header("Duyệt Bù Hàng Báo Hỏng")
@@ -380,6 +379,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
