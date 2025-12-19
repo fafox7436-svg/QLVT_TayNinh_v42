@@ -1,9 +1,9 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import plotly.express as px
 import datetime
 import io
-import os
 import uuid
 
 # --- 1. CẤU HÌNH HỆ THỐNG ---
@@ -24,58 +24,35 @@ TRANG_THAI_LIST = ["Dưới kho", "Đã đưa lên lưới"]
 MUC_DICH_LIST = ["Lắp TCD", "Lắp TCC", "Lắp KH sau TCC", "Dự phòng tại kho"]
 USER_DB = {"admin": "123", **{doi: "123" for doi in DANH_SACH_14_DOI}}
 
-# --- 2. QUẢN LÝ DỮ LIỆU ---
-INV_FILE = "pc_tayninh_v42_inventory.csv"
-REQ_FILE = "pc_tayninh_v42_requests.csv"
-
+# --- 2. KẾT NỐI GOOGLE SHEETS ---
 def load_data():
-    inv_cols = ['ID_He_Thong', 'Năm_SX', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Nhà_CC', 'Nguồn_Nhap', 'Vị_Trí_Kho', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Vị_Tiết_Chi_Tiết', 'Thoi_Gian_Tao', 'Thoi_Gian_Cap_Phat']
-    req_cols = ['Thời_Gian_Báo', 'Đơn_Vị', 'Loại_VT', 'Tên_Vật_Tư', 'Nhà_CC', 'Chủng_Loại', 'Số_Lượng', 'Lý_Do', 'Trạng_Thái', 'Thời_Gian_Bù']
-    
-    # Load Inventory
-    if os.path.exists(INV_FILE):
-        inv = pd.read_csv(INV_FILE)
-    else:
-        inv = pd.DataFrame(columns=inv_cols)
-        
-    # Load Requests
-    if os.path.exists(REQ_FILE):
-        req = pd.read_csv(REQ_FILE)
-    else:
-        req = pd.DataFrame(columns=req_cols)
-        
-    # Cleanup data
-    for df in [inv, req]:
-        for col in df.columns:
-            if df[col].dtype == 'object': 
-                df[col] = df[col].astype(str).str.strip()
-    return inv, req
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    try:
+        inv = conn.read(worksheet="inventory", ttl=0).dropna(how="all").astype(str)
+        req = conn.read(worksheet="requests", ttl=0).dropna(how="all").astype(str)
+        return inv, req
+    except Exception:
+        inv_cols = ['ID_He_Thong', 'Năm_SX', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Nhà_CC', 'Nguồn_Nhap', 'Vị_Trí_Kho', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Vị_Tiết_Chi_Tiết', 'Thoi_Gian_Tao', 'Thoi_Gian_Cap_Phat']
+        req_cols = ['Thời_Gian_Báo', 'Đơn_Vị', 'Loại_VT', 'Tên_Vật_Tư', 'Nhà_CC', 'Chủng_Loại', 'Số_Lượng', 'Lý_Do', 'Trạng_Thái', 'Thời_Gian_Bù']
+        return pd.DataFrame(columns=inv_cols), pd.DataFrame(columns=req_cols)
 
-# Khởi tạo dữ liệu vào Session State
 if 'inventory' not in st.session_state:
     st.session_state.inventory, st.session_state.requests = load_data()
 
-def save_all():
-    st.session_state.inventory.to_csv(INV_FILE, index=False)
-    st.session_state.requests.to_csv(REQ_FILE, index=False)
-
-def get_sample_excel(cols):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        pd.DataFrame(columns=cols).to_excel(writer, index=False)
-    return output.getvalue()
+def sync_to_cloud():
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    with st.spinner("🔄 Đang đồng bộ dữ liệu lên Cloud..."):
+        conn.update(worksheet="inventory", data=st.session_state.inventory)
+        conn.update(worksheet="requests", data=st.session_state.requests)
 
 # --- 3. TRUNG TÂM XÁC NHẬN ---
 @st.dialog("XÁC NHẬN NGHIỆP VỤ")
 def confirm_dialog(action, data=None):
-    st.warning("⚠️ Hệ thống yêu cầu xác nhận để ghi dữ liệu vào tệp gốc.")
+    st.warning("⚠️ Hệ thống yêu cầu xác nhận để ghi dữ liệu lên Google Sheets.")
     if st.button("✅ XÁC NHẬN", use_container_width=True):
         now_s = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        
         if action == "nhap":
             st.session_state.inventory = pd.concat([st.session_state.inventory, data], ignore_index=True)
-        elif action == "xoa":
-            st.session_state.inventory = st.session_state.inventory[~st.session_state.inventory['ID_He_Thong'].isin(data)]
         elif action == "cap_phat":
             for _, r in data.iterrows():
                 mask = (st.session_state.inventory['Vị_Trí_Kho'] == str(r['Từ_Kho'])) & (st.session_state.inventory['Mã_TB'] == str(r['Mã_TB']))
@@ -84,18 +61,18 @@ def confirm_dialog(action, data=None):
                 st.session_state.inventory.loc[idx, 'Thoi_Gian_Cap_Phat'] = now_s
         elif action == "hien_truong":
             for _, row in data.iterrows():
-                target_id = str(row['ID_He_Thong'])
-                st.session_state.inventory.loc[st.session_state.inventory['ID_He_Thong'] == target_id, 
+                st.session_state.inventory.loc[st.session_state.inventory['ID_He_Thong'] == str(row['ID_He_Thong']), 
                 ['Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Vị_Tiết_Chi_Tiết']] = row[['Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Vị_Tiết_Chi_Tiết']].values
         elif action == "bao_hong":
             st.session_state.requests = pd.concat([st.session_state.requests, data], ignore_index=True)
         elif action == "duyet_hong":
             st.session_state.requests.loc[data, 'Trạng_Thái'] = "Đã bù hàng"
             st.session_state.requests.loc[data, 'Thời_Gian_Bù'] = now_s
+        elif action == "xoa":
+            st.session_state.inventory = st.session_state.inventory[~st.session_state.inventory['ID_He_Thong'].isin(data)]
             
-        save_all()
-        st.success("Dữ liệu đã được cập nhật!")
-        st.rerun()
+        sync_to_cloud()
+        st.success("Dữ liệu đã được cập nhật Cloud!"); st.rerun()
 
 # --- 4. ĐĂNG NHẬP ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
@@ -107,178 +84,110 @@ if not st.session_state.logged_in:
         p = st.text_input("Mật khẩu", type="password")
         if st.button("🔓 Đăng nhập"):
             if p == USER_DB.get(u):
-                st.session_state.logged_in = True
-                st.session_state.user_role = "admin" if u == "admin" else "doi"
-                st.session_state.user_name = u
+                st.session_state.logged_in, st.session_state.user_role, st.session_state.user_name = True, ("admin" if u=="admin" else "doi"), u
                 st.rerun()
-            else:
-                st.error("Mật khẩu sai!")
+            else: st.error("Mật khẩu sai!")
     st.stop()
 
 # --- 5. SIDEBAR ---
-st.sidebar.write(f"👤 Đang dùng: **{st.session_state.user_name}**")
-if st.sidebar.button("Đăng xuất"):
-    st.session_state.logged_in = False
-    st.rerun()
+st.sidebar.write(f"👤 Tài khoản: **{st.session_state.user_name}**")
+if st.sidebar.button("Đăng xuất"): st.session_state.logged_in = False; st.rerun()
 
 if st.session_state.user_role == "admin":
-    menu = st.sidebar.radio("CÔNG TY", ["📊 Giám sát & Dashboard", "📥 Nhập Kho", "🚚 Cấp Phát", "🚨 Duyệt Báo Hỏng"])
+    menu = st.sidebar.radio("CÔNG TY", ["📊 Dashboard", "📥 Nhập Kho", "🚚 Cấp Phát", "🚨 Duyệt Báo Hỏng"])
 else:
     menu = st.sidebar.radio("ĐỘI QLĐ", ["🛠️ Hiện trường (Seri)", "🚨 Báo Hỏng"])
 
 # --- 6. CHI TIẾT CHỨC NĂNG ---
 
-# A. GIÁM SÁT (ADMIN)
-if menu == "📊 Giám sát & Dashboard":
+# A. DASHBOARD
+if menu == "📊 Dashboard":
     st.header("Dashboard Giám Sát Lưới")
     df = st.session_state.inventory.copy()
     if not df.empty:
         c1, c2 = st.columns(2)
-        with c1:
-            st.plotly_chart(px.pie(df, names='Trạng_Thái_Luoi', title="Trạng thái Lưới"), use_container_width=True)
-        with c2:
-            st.plotly_chart(px.bar(df.groupby(['Vị_Trí_Kho', 'Trạng_Thái_Luoi']).size().reset_index(name='SL'), 
-                                   x='Vị_Trí_Kho', y='SL', color='Trạng_Thái_Luoi', barmode='group'), use_container_width=True)
-        
+        with c1: st.plotly_chart(px.pie(df, names='Trạng_Thái_Luoi', title="Tỷ lệ Trên lưới/Dưới kho"), use_container_width=True)
+        with c2: st.plotly_chart(px.bar(df.groupby(['Vị_Trí_Kho', 'Trạng_Thái_Luoi']).size().reset_index(name='SL'), x='Vị_Trí_Kho', y='SL', color='Trạng_Thái_Luoi', title="Vật tư theo từng đơn vị"), use_container_width=True)
         st.markdown("---")
         df.insert(0, "Xóa", False)
-        edited = st.data_editor(df, use_container_width=True)
-        to_del = edited[edited["Xóa"] == True]["ID_He_Thong"].tolist()
-        if to_del and st.button("🗑️ Xóa vĩnh viễn dòng chọn"):
-            confirm_dialog("xoa", to_del)
-    else:
-        st.info("Kho đang trống.")
+        ed = st.data_editor(df, use_container_width=True)
+        to_del = ed[ed["Xóa"] == True]["ID_He_Thong"].tolist()
+        if to_del and st.button("🗑️ Xóa vĩnh viễn trên Cloud"): confirm_dialog("xoa", to_del)
+    else: st.info("Dữ liệu trống.")
 
-# B. NHẬP KHO (ADMIN)
+# B. NHẬP KHO (SỬA LỖI NHÀ CUNG CẤP TẠI ĐÂY)
 elif menu == "📥 Nhập Kho":
     st.header("Nhập Vật Tư Mới")
     t1, t2 = st.tabs(["✍️ Nhập tay", "📁 Excel Nhập"])
     with t1:
-        with st.form("f_nhap"):
-            lvt = st.selectbox("Loại VT", list(DANM_MUC_NCC.keys()))
-            ncc = st.selectbox("Nhà CC", DANM_MUC_NCC[lvt])
+        # Tách chọn Loại VT ra ngoài form để Nhà CC cập nhật ngay lập tức
+        lvt = st.selectbox("1. Loại vật tư", list(DANM_MUC_NCC.keys()))
+        ncc_list = DANM_MUC_NCC[lvt] # Lấy danh sách NCC tương ứng
+        
+        with st.form("f_nhap_tay"):
+            ncc = st.selectbox("2. Nhà cung cấp", ncc_list)
             c1, c2 = st.columns(2)
-            with c1:
-                ng = st.selectbox("Nguồn", NGUON_NHAP_NGOAI)
-                kh = st.selectbox("Kho", CO_SO)
-            with c2:
-                mod = st.text_input("Model")
-                sl = st.number_input("Số lượng", min_value=1, step=1)
-            if st.form_submit_button("🚀 Gửi xác nhận"):
+            with c1: 
+                ng = st.selectbox("3. Nguồn nhập", NGUON_NHAP_NGOAI)
+                kh = st.selectbox("4. Nhập vào kho", CO_SO)
+            with c2: 
+                mod = st.text_input("5. Model/Mã thiết bị")
+                sl = st.number_input("6. Số lượng", min_value=1)
+                
+            if st.form_submit_button("🚀 Xác nhận Nhập"):
                 now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                new_rows = []
-                for _ in range(int(sl)):
-                    new_rows.append({
-                        'ID_He_Thong': f"TN-{uuid.uuid4().hex[:8].upper()}", 
-                        'Năm_SX': NAM_HIEN_TAI, 'Loại_VT': lvt, 'Mã_TB': mod, 'Số_Seri': 'Chưa nhập', 
-                        'Nhà_CC': ncc, 'Nguồn_Nhap': ng, 'Vị_Trí_Kho': kh, 'Trạng_Thái_Luoi': 'Dưới kho', 
-                        'Thoi_Gian_Tao': now, 'Thoi_Gian_Cap_Phat': '---'
-                    })
-                confirm_dialog("nhap", pd.DataFrame(new_rows))
+                new_data = pd.DataFrame([{
+                    'ID_He_Thong': f"TN-{uuid.uuid4().hex[:8].upper()}", 'Năm_SX': NAM_HIEN_TAI, 'Loại_VT': lvt, 
+                    'Mã_TB': mod, 'Số_Seri': 'Chưa nhập', 'Nhà_CC': ncc, 'Nguồn_Nhap': ng, 'Vị_Trí_Kho': kh, 
+                    'Trạng_Thái_Luoi': 'Dưới kho', 'Thoi_Gian_Tao': now
+                } for _ in range(int(sl))])
+                confirm_dialog("nhap", new_data)
     with t2:
-        f = st.file_uploader("Nạp Excel Nhập (Cần cột: Số_Lượng, Năm_SX, Loại_VT, Mã_TB, Nhà_CC, Nguồn_Nhap)", type=["xlsx"])
-        if f and st.button("🚀 Nạp Excel"):
+        f = st.file_uploader("Nạp file Excel Nhập", type=["xlsx"])
+        if f and st.button("🚀 Đồng bộ Excel lên Cloud"):
             df_ex = pd.read_excel(f)
-            now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            ex_data = []
-            for _, r in df_ex.iterrows():
-                for i in range(int(r['Số_Lượng'])):
-                    ex_data.append({
-                        'ID_He_Thong': f"TN-EX-{uuid.uuid4().hex[:6].upper()}-{i}", 
-                        'Năm_SX': r['Năm_SX'], 'Loại_VT': str(r['Loại_VT']), 'Mã_TB': str(r['Mã_TB']), 
-                        'Số_Seri': 'Chưa nhập', 'Nhà_CC': r['Nhà_CC'], 'Nguồn_Nhap': r['Nguồn_Nhap'], 
-                        'Vị_Trí_Kho': CO_SO[0], 'Trạng_Thái_Luoi': 'Dưới kho', 
-                        'Thoi_Gian_Tao': now, 'Thoi_Gian_Cap_Phat': '---'
-                    })
-            confirm_dialog("nhap", pd.DataFrame(ex_data))
+            df_ex['ID_He_Thong'] = [f"TN-EX-{uuid.uuid4().hex[:6].upper()}" for _ in range(len(df_ex))]
+            df_ex['Thoi_Gian_Tao'] = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            confirm_dialog("nhap", df_ex)
 
-# C. CẤP PHÁT (ADMIN)
+# C. CẤP PHÁT
 elif menu == "🚚 Cấp Phát":
     st.header("Cấp Phát Về Đội")
-    t1, t2 = st.tabs(["✍️ Cấp tay", "📁 Excel Cấp"])
-    with t1:
-        tu_k = st.selectbox("Từ kho", CO_SO)
-        lvt_c = st.selectbox("Loại VT", list(DANM_MUC_NCC.keys()))
-        models = st.session_state.inventory[(st.session_state.inventory['Vị_Trí_Kho'] == tu_k) & (st.session_state.inventory['Loại_VT'] == lvt_c)]['Mã_TB'].unique()
-        with st.form("f_cap"):
-            m_c = st.selectbox("Model", models if len(models)>0 else ["Trống"])
-            den = st.selectbox("Đến Đội", DANH_SACH_14_DOI)
-            sl_c = st.number_input("SL", min_value=1, step=1)
-            if st.form_submit_button("🚀 Cấp"):
-                # Kiểm tra tồn kho trước khi cấp
-                ton_kho = len(st.session_state.inventory[(st.session_state.inventory['Vị_Trí_Kho'] == tu_k) & (st.session_state.inventory['Mã_TB'] == m_c)])
-                if sl_c > ton_kho:
-                    st.error(f"Không đủ tồn kho! (Hiện có: {ton_kho})")
-                else:
-                    confirm_dialog("cap_phat", pd.DataFrame([{'Từ_Kho': tu_k, 'Mã_TB': m_c, 'Số_Lượng': sl_c, 'Đến_Đơn_Vị': den}]))
-    with t2:
-        f_c = st.file_uploader("Nạp Excel Cấp (Cần cột: Từ_Kho, Mã_TB, Số_Lượng, Đến_Đơn_Vị)", type=["xlsx"])
-        if f_c and st.button("🚀 Nạp Excel Cấp"):
-            confirm_dialog("cap_phat", pd.read_excel(f_c))
+    tu_k = st.selectbox("Từ kho", CO_SO)
+    lvt_c = st.selectbox("Loại VT", list(DANM_MUC_NCC.keys()))
+    models = st.session_state.inventory[(st.session_state.inventory['Vị_Trí_Kho'] == tu_k) & (st.session_state.inventory['Loại_VT'] == lvt_c)]['Mã_TB'].unique()
+    with st.form("f_cap"):
+        m_c = st.selectbox("Model", models if len(models)>0 else ["Trống"])
+        den, sl_c = st.selectbox("Đến Đội", DANH_SACH_14_DOI), st.number_input("Số lượng cấp", min_value=1)
+        if st.form_submit_button("🚀 Thực hiện Cấp"):
+            confirm_dialog("cap_phat", pd.DataFrame([{'Từ_Kho': tu_k, 'Mã_TB': m_c, 'Số_Lượng': sl_c, 'Đến_Đơn_Vị': den}]))
 
-# D. DUYỆT BÁO HỎNG (ADMIN)
-elif menu == "🚨 Duyệt Báo Hỏng":
-    st.header("Duyệt Bù Hàng Báo Hỏng")
-    req_df = st.session_state.requests.copy()
-    if not req_df.empty:
-        req_df.insert(0, "Duyệt", False)
-        edited = st.data_editor(req_df, use_container_width=True, disabled=[c for c in req_df.columns if c != "Duyệt"])
-        to_app = edited[edited["Duyệt"] == True].index.tolist()
-        if to_app and st.button("✅ Phê duyệt bù hàng"):
-            confirm_dialog("duyet_hong", to_app)
-    else:
-        st.info("Không có yêu cầu báo hỏng nào.")
-
-# E. HIỆN TRƯỜNG (ĐỘI)
+# D. HIỆN TRƯỜNG
 elif menu == "🛠️ Hiện trường (Seri)":
-    st.header(f"Cập nhật hiện trường: {st.session_state.user_name}")
-    t1, t2 = st.tabs(["✍️ Cập nhật tay", "📁 Excel Hiện trường"])
+    st.header(f"Cập nhật Đội: {st.session_state.user_name}")
     df_dv = st.session_state.inventory[st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name]
-    with t1:
-        if not df_dv.empty:
-            edited = st.data_editor(df_dv[['ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Vị_Tiết_Chi_Tiết']],
-                column_config={
-                    "Trạng_Thái_Luoi": st.column_config.SelectboxColumn("TT", options=TRANG_THAI_LIST),
-                    "Mục_Đích": st.column_config.SelectboxColumn("Vị trí", options=MUC_DICH_LIST)
-                }, 
-                disabled=['ID_He_Thong', 'Loại_VT', 'Mã_TB'], 
-                use_container_width=True)
-            if st.button("💾 Lưu thay đổi"):
-                confirm_dialog("hien_truong", edited)
-        else:
-            st.warning("Kho của Đội hiện đang trống.")
-    with t2:
-        st.download_button("📥 Tải danh sách vật tư tại Đội", df_dv.to_csv(index=False).encode('utf-8-sig'), "Kho_Doi.csv")
-        f_ht = st.file_uploader("Nạp Excel hiện trường (ID_He_Thong, Số_Seri, Trạng_Thái_Luoi, Mục_Đích, Vị_Tiết_Chi_Tiết)", type=["xlsx", "csv"])
-        if f_ht and st.button("🚀 Nạp Excel Hiện trường"):
-            df_ht = pd.read_excel(f_ht) if f_ht.name.endswith('xlsx') else pd.read_csv(f_ht)
-            confirm_dialog("hien_truong", df_ht)
+    if not df_dv.empty:
+        ed = st.data_editor(df_dv[['ID_He_Thong', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Vị_Tiết_Chi_Tiết']],
+            column_config={"Trạng_Thái_Luoi": st.column_config.SelectboxColumn("TT", options=TRANG_THAI_LIST), "Mục_Đích": st.column_config.SelectboxColumn("Vị trí", options=MUC_DICH_LIST)},
+            disabled=['ID_He_Thong', 'Mã_TB'], use_container_width=True)
+        if st.button("💾 Lưu Cloud"): confirm_dialog("hien_truong", ed)
+    else: st.warning("Kho Đội trống.")
 
-# F. BÁO HỎNG (ĐỘI)
+# E. BÁO HỎNG & DUYỆT HỎNG
 elif menu == "🚨 Báo Hỏng":
-    st.header("Báo Hỏng Thiết Bị")
-    t1, t2 = st.tabs(["✍️ Báo tay", "📁 Excel Báo hỏng"])
-    with t1:
-        with st.form("f_h"):
-            lvt = st.selectbox("Loại", list(DANM_MUC_NCC.keys()))
-            tvt = st.text_input("Tên VT")
-            ncc = st.selectbox("Nhà CC", DANM_MUC_NCC[lvt])
-            cl = st.text_input("Model/Chủng loại")
-            sl = st.number_input("SL", min_value=1, step=1)
-            if st.form_submit_button("🚀 Gửi báo hỏng"):
-                now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                new_h = pd.DataFrame([{
-                    'Thời_Gian_Báo': now, 'Đơn_Vị': st.session_state.user_name, 'Loại_VT': lvt, 
-                    'Tên_Vật_Tư': tvt, 'Nhà_CC': ncc, 'Chủng_Loại': cl, 'Số_Lượng': sl, 
-                    'Lý_Do': 'Hỏng hiện trường', 'Trạng_Thái': 'Chờ xử lý', 'Thời_Gian_Bù': '---'
-                }])
-                confirm_dialog("bao_hong", new_h)
-    with t2:
-        f_h = st.file_uploader("Nạp Excel Báo hỏng (Loại_VT, Tên_Vật_Tư, Nhà_CC, Chủng_Loại, Số_Lượng, Lý_Do)", type=["xlsx"])
-        if f_h and st.button("🚀 Nạp Excel Báo hỏng"):
-            df_bh = pd.read_excel(f_h)
-            df_bh['Thời_Gian_Báo'] = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            df_bh['Đơn_Vị'] = st.session_state.user_name
-            df_bh['Trạng_Thái'] = 'Chờ xử lý'
-            df_bh['Thời_Gian_Bù'] = '---'
-            confirm_dialog("bao_hong", df_bh)
+    st.header("Gửi Yêu Cầu Báo Hỏng")
+    with st.form("f_h"):
+        lvt = st.selectbox("Loại", list(DANM_MUC_NCC.keys()))
+        tvt, ncc = st.text_input("Tên vật tư"), st.selectbox("Nhà CC", DANM_MUC_NCC[lvt])
+        cl, sl = st.text_input("Model"), st.number_input("SL", min_value=1)
+        if st.form_submit_button("🚀 Gửi báo hỏng"):
+            now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            confirm_dialog("bao_hong", pd.DataFrame([{'Thời_Gian_Báo': now, 'Đơn_Vị': st.session_state.user_name, 'Loại_VT': lvt, 'Tên_Vật_Tư': tvt, 'Nhà_CC': ncc, 'Chủng_Loại': cl, 'Số_Lượng': sl, 'Lý_Do': 'Hỏng', 'Trạng_Thái': 'Chờ xử lý', 'Thời_Gian_Bù': '---'}]))
+
+elif menu == "🚨 Duyệt Báo Hỏng":
+    st.header("Phê Duyệt Bù Hàng")
+    if not st.session_state.requests.empty:
+        req_df = st.session_state.requests.copy(); req_df.insert(0, "Duyệt", False)
+        ed_h = st.data_editor(req_df, use_container_width=True, disabled=req_df.columns[1:])
+        idx = ed_h[ed_h["Duyệt"] == True].index.tolist()
+        if idx and st.button("✅ Xác nhận bù hàng"): confirm_dialog("duyet_hong", idx)
