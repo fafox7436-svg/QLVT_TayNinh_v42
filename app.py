@@ -150,50 +150,40 @@ if menu == "📊 Giám sát & Dashboard":
     df = st.session_state.inventory.copy()
     
     if not df.empty:
-        # 1. Bộ lọc nhanh
-        st.write("### 🔍 Bộ lọc nhanh")
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            filter_loai = st.multiselect("Chọn loại vật tư", options=df['Loại_VT'].unique(), default=df['Loại_VT'].unique())
-        with col_f2:
-            filter_kho = st.multiselect("Chọn vị trí kho/đơn vị", options=df['Vị_Trí_Kho'].unique(), default=df['Vị_Trí_Kho'].unique())
-        
-        # Áp dụng lọc
-        df = df[(df['Loại_VT'].isin(filter_loai)) & (df['Vị_Trí_Kho'].isin(filter_kho))]
+        # Bộ lọc để Dashboard linh hoạt hơn
+        c_f1, c_f2 = st.columns(2)
+        with c_f1:
+            filter_loai = st.multiselect("Lọc loại vật tư", options=df['Loại_VT'].unique(), default=df['Loại_VT'].unique())
+        with c_f2:
+            filter_kho = st.multiselect("Lọc vị trí kho", options=df['Vị_Trí_Kho'].unique(), default=df['Vị_Trí_Kho'].unique())
+            
+        df_filtered = df[(df['Loại_VT'].isin(filter_loai)) & (df['Vị_Trí_Kho'].isin(filter_kho))]
 
-        # 2. Biểu đồ
+        # Biểu đồ hiển thị
         c1, c2 = st.columns(2)
         with c1:
-            st.plotly_chart(px.pie(df, names='Trạng_Thái_Luoi', title="Tổng quan trạng thái (Toàn bộ)"), use_container_width=True)
+            st.plotly_chart(px.pie(df_filtered, names='Trạng_Thái_Luoi', title="Tỉ lệ Trạng thái Lưới", hole=0.3), use_container_width=True)
         
         with c2:
-            # Nhóm dữ liệu theo Kho và Loại vật tư để tách màu
-            df_chart = df.groupby(['Vị_Trí_Kho', 'Loại_VT']).size().reset_index(name='Số lượng')
+            # Nhóm dữ liệu theo Kho và Loại vật tư để hiện nhiều màu khác nhau
+            df_chart = df_filtered.groupby(['Vị_Trí_Kho', 'Loại_VT']).size().reset_index(name='Số lượng')
             
             fig = px.bar(
                 df_chart, 
                 x='Vị_Trí_Kho', 
                 y='Số lượng', 
-                color='Loại_VT', # Phân biệt màu sắc theo loại (Công tơ, DCU, Modem...)
-                title="Phân loại vật tư theo từng đơn vị",
+                color='Loại_VT', # Phân biệt màu xanh/đỏ/tím theo từng loại vật tư
+                title="Số lượng vật tư theo đơn vị & chủng loại",
                 barmode='group',
                 text_auto=True
             )
             st.plotly_chart(fig, use_container_width=True)
         
         st.markdown("---")
-        st.subheader("📋 Bảng dữ liệu chi tiết")
-        df.insert(0, "Xóa", False)
-        edited = st.data_editor(df, use_container_width=True)
-        to_del = edited[edited["Xóa"] == True]["ID_He_Thong"].tolist()
-        if to_del and st.button("🗑️ Xóa vĩnh viễn dòng chọn"):
-            confirm_dialog("xoa", to_del)
-    else:
-        st.info("Kho đang trống.")
+        st.subheader("📋 Danh sách dữ liệu")
+        df_filtered.insert(0, "Xóa", False)
+        edited = st.data_editor(df_filtered, use_container_width=True)
         
-        st.markdown("---")
-        df.insert(0, "Xóa", False)
-        edited = st.data_editor(df, use_container_width=True)
         to_del = edited[edited["Xóa"] == True]["ID_He_Thong"].tolist()
         if to_del and st.button("🗑️ Xóa vĩnh viễn dòng chọn"):
             confirm_dialog("xoa", to_del)
@@ -333,6 +323,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
