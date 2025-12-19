@@ -273,27 +273,51 @@ elif menu == "🚨 Duyệt Báo Hỏng":
 # E. HIỆN TRƯỜNG (ĐỘI)
 elif menu == "🛠️ Hiện trường (Seri)":
     st.header(f"Cập nhật hiện trường: {st.session_state.user_name}")
-    t1, t2 = st.tabs(["✍️ Cập nhật tay", "📁 Excel Hiện trường"])
-    df_dv = st.session_state.inventory[st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name]
-    with t1:
-        if not df_dv.empty:
-            edited = st.data_editor(df_dv[['ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Vị_Tiết_Chi_Tiết']],
+    
+    # 1. Lấy dữ liệu của Đội
+    df_dv = st.session_state.inventory[st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name].copy()
+
+    if not df_dv.empty:
+        # --- BỔ SUNG BỘ LỌC ĐỂ DỄ TÌM KIẾM ---
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            loai_chon = st.selectbox("🎯 Chọn loại vật tư cần cập nhật", ["Tất cả"] + list(df_dv['Loại_VT'].unique()))
+        
+        # Lọc dữ liệu theo loại đã chọn
+        if loai_chon != "Tất cả":
+            df_display = df_dv[df_dv['Loại_VT'] == loai_chon]
+        else:
+            df_display = df_dv
+
+        t1, t2 = st.tabs(["✍️ Cập nhật trực tiếp", "📁 Excel Hiện trường"])
+        
+        with t1:
+            st.info(f"Đang hiển thị {len(df_display)} thiết bị {loai_chon if loai_chon != 'Tất cả' else ''}")
+            
+            # Cấu hình bảng sửa dữ liệu
+            edited = st.data_editor(
+                df_display[['ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Vị_Tiết_Chi_Tiết']],
                 column_config={
-                    "Trạng_Thái_Luoi": st.column_config.SelectboxColumn("TT", options=TRANG_THAI_LIST),
-                    "Mục_Đích": st.column_config.SelectboxColumn("Vị trí", options=MUC_DICH_LIST)
+                    "Trạng_Thái_Luoi": st.column_config.SelectboxColumn("Trạng thái", options=TRANG_THAI_LIST, required=True),
+                    "Mục_Đích": st.column_config.TextColumn("Vị trí/Mục đích (Nhập tay)", help="Bạn có thể nhập tay vị trí lắp đặt tại đây"),
+                    "Vị_Tiết_Chi_Tiết": st.column_config.TextColumn("Ghi chú chi tiết")
                 }, 
                 disabled=['ID_He_Thong', 'Loại_VT', 'Mã_TB'], 
-                use_container_width=True)
-            if st.button("💾 Lưu thay đổi"):
+                use_container_width=True,
+                key="editor_hien_truong"
+            )
+            
+            if st.button("💾 Lưu thay đổi hiện trường"):
                 confirm_dialog("hien_truong", edited)
-        else:
-            st.warning("Kho của Đội hiện đang trống.")
-    with t2:
-        st.download_button("📥 Tải danh sách vật tư tại Đội", df_dv.to_csv(index=False).encode('utf-8-sig'), "Kho_Doi.csv")
-        f_ht = st.file_uploader("Nạp Excel hiện trường (ID_He_Thong, Số_Seri, Trạng_Thái_Luoi, Mục_Đích, Vị_Tiết_Chi_Tiết)", type=["xlsx", "csv"])
-        if f_ht and st.button("🚀 Nạp Excel Hiện trường"):
-            df_ht = pd.read_excel(f_ht) if f_ht.name.endswith('xlsx') else pd.read_csv(f_ht)
-            confirm_dialog("hien_truong", df_ht)
+                
+        with t2:
+            st.download_button("📥 Tải danh sách vật tư của Đội", df_dv.to_csv(index=False).encode('utf-8-sig'), "Kho_Doi.csv")
+            f_ht = st.file_uploader("Nạp Excel hiện trường (Cần đúng cột: ID_He_Thong, Số_Seri, Trạng_Thái_Luoi, Mục_Đích, Vị_Tiết_Chi_Tiết)", type=["xlsx", "csv"])
+            if f_ht and st.button("🚀 Nạp Excel Hiện trường"):
+                df_ht = pd.read_excel(f_ht) if f_ht.name.endswith('xlsx') else pd.read_csv(f_ht)
+                confirm_dialog("hien_truong", df_ht)
+    else:
+        st.warning("Kho của Đội hiện đang trống. Vui lòng liên hệ Admin để cấp phát vật tư.")
 
 # F. BÁO HỎNG (ĐỘI)
 elif menu == "🚨 Báo Hỏng":
@@ -323,6 +347,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
