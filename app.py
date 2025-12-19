@@ -32,6 +32,22 @@ def load_data():
     inv_cols = ['ID_He_Thong', 'Năm_SX', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Nhà_CC', 'Nguồn_Nhap', 'Vị_Trí_Kho', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Vị_Tiết_Chi_Tiết', 'Thoi_Gian_Tao', 'Thoi_Gian_Cap_Phat']
     req_cols = ['Thời_Gian_Báo', 'Đơn_Vị', 'Loại_VT', 'Tên_Vật_Tư', 'Nhà_CC', 'Chủng_Loại', 'Số_Lượng', 'Lý_Do', 'Trạng_Thái', 'Thời_Gian_Bù']
     
+    # Tự động tạo file nếu chưa tồn tại
+    if not os.path.exists(INV_FILE):
+        pd.DataFrame(columns=inv_cols).to_csv(INV_FILE, index=False, encoding='utf-8-sig')
+    if not os.path.exists(REQ_FILE):
+        pd.DataFrame(columns=req_cols).to_csv(REQ_FILE, index=False, encoding='utf-8-sig')
+        
+    inv = pd.read_csv(INV_FILE)
+    req = pd.read_csv(REQ_FILE)
+    
+    # Làm sạch dữ liệu
+    for df in [inv, req]:
+        for col in df.columns:
+            if df[col].dtype == 'object': 
+                df[col] = df[col].astype(str).str.strip()
+    return inv, req
+    
     # Load Inventory
     if os.path.exists(INV_FILE):
         inv = pd.read_csv(INV_FILE)
@@ -282,3 +298,4 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
