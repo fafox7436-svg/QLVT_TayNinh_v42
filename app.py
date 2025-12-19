@@ -124,6 +124,7 @@ elif menu == "📥 Nhập Vật Tư":
     t1, t2 = st.tabs(["✍️ Nhập tay thủ công", "📁 Đổ dữ liệu từ Excel"])
     
     with t1:
+        # Tách chọn Loại VT ra ngoài để cập nhật NCC ngay lập tức
         lvt = st.selectbox("Chọn Loại vật tư", list(DANM_MUC_NCC.keys()), key="nhap_lvt")
         with st.form("f_nhap_tay"):
             ncc = st.selectbox("Nhà cung cấp", DANM_MUC_NCC[lvt])
@@ -134,28 +135,44 @@ elif menu == "📥 Nhập Vật Tư":
             with c2:
                 mod = st.text_input("Model thiết bị")
                 sl = st.number_input("Số lượng nhập", min_value=1, step=1)
+            
             if st.form_submit_button("🚀 Xác nhận Nhập tay"):
                 now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                 new_data = pd.DataFrame([{
-                    'ID_He_Thong': f"TN-{uuid.uuid4().hex[:8].upper()}", 'Năm_SX': NAM_HIEN_TAI, 'Loại_VT': lvt,
-                    'Mã_TB': mod, 'Số_Seri': 'Chưa nhập', 'Nhà_CC': ncc, 'Nguồn_Nhap': ng, 'Vị_Trí_Kho': kh,
-                    'Trạng_Thái_Luoi': 'Dưới kho', 'Mục_Đích': 'Dự phòng', 'Vị_Tiết_Chi_Tiết': 'Tại kho', 'Thoi_Gian_Tao': now
+                    'ID_He_Thong': f"TN-{uuid.uuid4().hex[:8].upper()}", 
+                    'Năm_SX': NAM_HIEN_TAI, 'Loại_VT': lvt,
+                    'Mã_TB': mod, 'Số_Seri': 'Chưa nhập', 'Nhà_CC': ncc, 
+                    'Nguồn_Nhap': ng, 'Vị_Trí_Kho': kh,
+                    'Trạng_Thái_Luoi': 'Dưới kho', 'Mục_Đích': 'Dự phòng', 
+                    'Vị_Tiết_Chi_Tiết': 'Tại kho', 'Thoi_Gian_Tao': now
                 } for _ in range(int(sl))])
                 confirm_dialog("nhap", new_data)
 
     with t2:
-        st.info("Lưu ý: File Excel cần có các cột tiêu đề giống bảng dữ liệu (ID_He_Thong, Loại_VT, Nhà_CC, Mã_TB...).")
-        file_ex = st.file_uploader("Tải file Excel (.xlsx)", type=["xlsx"])
+        st.subheader("Nạp dữ liệu từ file Excel")
+        st.info("Tải file Excel (.xlsx) có các cột: Loại_VT, Nhà_CC, Mã_TB, Năm_SX, Nguồn_Nhap, Vị_Trí_Kho")
+        
+        file_ex = st.file_uploader("Chọn file Excel mẫu của bạn", type=["xlsx"])
+        
         if file_ex:
+            # Đọc dữ liệu từ Excel
             df_upload = pd.read_excel(file_ex).astype(str)
-            st.write("Xem trước dữ liệu:")
+            
+            st.write("🔍 Xem trước 5 dòng dữ liệu từ file của bạn:")
             st.dataframe(df_upload.head(), use_container_width=True)
-            if st.button("📥 Đẩy dữ liệu Excel lên Cloud"):
-                # Tự động tạo ID nếu file Excel thiếu
+            
+            if st.button("📥 XÁC NHẬN ĐẨY TẤT CẢ LÊN CLOUD"):
+                # Tự động bổ sung các cột hệ thống còn thiếu
                 if 'ID_He_Thong' not in df_upload.columns:
                     df_upload['ID_He_Thong'] = [f"TN-EX-{uuid.uuid4().hex[:6].upper()}" for _ in range(len(df_upload))]
-                if 'Thoi_Gian_Tao' not in df_upload.columns:
-                    df_upload['Thoi_Gian_Tao'] = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                
+                df_upload['Thoi_Gian_Tao'] = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                
+                # Đảm bảo các cột mặc định cho Hiện trường không bị trống
+                if 'Số_Seri' not in df_upload.columns: df_upload['Số_Seri'] = 'Chưa nhập'
+                if 'Trạng_Thái_Luoi' not in df_upload.columns: df_upload['Trạng_Thái_Luoi'] = 'Dưới kho'
+                if 'Mục_Đích' not in df_upload.columns: df_upload['Mục_Đích'] = 'Dự phòng tại kho'
+                
                 confirm_dialog("nhap", df_upload)
 
 # C. CẤP PHÁT
@@ -220,3 +237,4 @@ elif menu == "🚨 Duyệt Báo Hỏng":
         if idx_duyet and st.button("✅ Xác nhận đã bù hàng cho Đội"):
             confirm_dialog("duyet_hong", idx_duyet)
     else: st.info("Chưa có yêu cầu báo hỏng nào.")
+
