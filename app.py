@@ -5,9 +5,10 @@ import datetime
 import io
 import os
 import uuid
+from streamlit_gsheets import GSheetsConnection
 
 # --- 1. CẤU HÌNH HỆ THỐNG ---
-st.set_page_config(page_title="Hệ thống QLVT PC Tây Ninh - v42 Full Option", layout="wide")
+st.set_page_config(page_title="Hệ thống QLVT PC Tây Ninh - v42 Full Sync GS", layout="wide")
 NAM_HIEN_TAI = datetime.datetime.now().year
 
 DANM_MUC_NCC = {
@@ -24,29 +25,28 @@ TRANG_THAI_LIST = ["Dưới kho", "Đã đưa lên lưới"]
 MUC_DICH_LIST = ["Lắp TCD", "Lắp TCC", "Lắp KH sau TCC", "Dự phòng tại kho"]
 USER_DB = {"admin": "123", **{doi: "123" for doi in DANH_SACH_14_DOI}}
 
-# --- 2. QUẢN LÝ DỮ LIỆU ---
-INV_FILE = "pc_tayninh_v42_inventory.csv"
-REQ_FILE = "pc_tayninh_v42_requests.csv"
-
+# --- 2. HÀM HỖ TRỢ EXCEL ---
 def get_sample_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False)
     return output.getvalue()
 
+# --- 3. QUẢN LÝ DỮ LIỆU (GOOGLE SHEETS) ---
+# Kết nối Google Sheets qua GSheetsConnection
+conn = st.connection("gsheets", type=GSheetsConnection)
+
 def load_data():
-    # Sửa lỗi chính tả từ Vị_Tiết_Chi_Tiết thành Chi_Tiết_Vị_Trí
     inv_cols = ['ID_He_Thong', 'Năm_SX', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Nhà_CC', 'Nguồn_Nhap', 'Vị_Trí_Kho', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí', 'Thoi_Gian_Tao', 'Thoi_Gian_Cap_Phat']
     req_cols = ['Thời_Gian_Báo', 'Đơn_Vị', 'Loại_VT', 'Tên_Vật_Tư', 'Nhà_CC', 'Chủng_Loại', 'Số_Lượng', 'Lý_Do', 'Trạng_Thái', 'Thời_Gian_Bù']
     
-    if os.path.exists(INV_FILE):
-        inv = pd.read_csv(INV_FILE)
-    else:
+    try:
+        # Đọc dữ liệu từ Google Sheets (Yêu cầu cấu hình secrets)
+        inv = conn.read(worksheet="Inventory", ttl=0)
+        req = conn.read(worksheet="Requests", ttl=0)
+    except Exception:
+        # Nếu không kết nối được hoặc sheet trống, tạo mới
         inv = pd.DataFrame(columns=inv_cols)
-        
-    if os.path.exists(REQ_FILE):
-        req = pd.read_csv(REQ_FILE)
-    else:
         req = pd.DataFrame(columns=req_cols)
         
     for df in [inv, req]:
@@ -59,13 +59,14 @@ if 'inventory' not in st.session_state:
     st.session_state.inventory, st.session_state.requests = load_data()
 
 def save_all():
-    st.session_state.inventory.to_csv(INV_FILE, index=False, encoding='utf-8-sig')
-    st.session_state.requests.to_csv(REQ_FILE, index=False, encoding='utf-8-sig')
+    # Cập nhật trực tiếp lên Google Sheets
+    conn.update(worksheet="Inventory", data=st.session_state.inventory)
+    conn.update(worksheet="Requests", data=st.session_state.requests)
 
-# --- 3. TRUNG TÂM XÁC NHẬN ---
+# --- 4. TRUNG TÂM XÁC NHẬN ---
 @st.dialog("XÁC NHẬN NGHIỆP VỤ")
 def confirm_dialog(action, data=None):
-    st.warning("⚠️ Hệ thống yêu cầu xác nhận để ghi dữ liệu vào tệp gốc.")
+    st.warning("⚠️ Hệ thống yêu cầu xác nhận để ghi dữ liệu lên Google Sheets.")
     if st.button("✅ XÁC NHẬN", use_container_width=True):
         now_s = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         
@@ -91,10 +92,10 @@ def confirm_dialog(action, data=None):
             st.session_state.requests.loc[data, 'Thời_Gian_Bù'] = now_s
             
         save_all()
-        st.success("Dữ liệu đã được cập nhật!")
+        st.success("Dữ liệu đã được đồng bộ trực tuyến!")
         st.rerun()
 
-# --- 4. ĐĂNG NHẬP ---
+# --- 5. ĐĂNG NHẬP ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if not st.session_state.logged_in:
     st.markdown("<h1 style='text-align:center; color:#1E3A8A;'>QLVT PC TÂY NINH</h1>", unsafe_allow_html=True)
@@ -112,7 +113,7 @@ if not st.session_state.logged_in:
                 st.error("Mật khẩu sai!")
     st.stop()
 
-# --- 5. SIDEBAR ---
+# --- 6. SIDEBAR ---
 st.sidebar.write(f"👤 Đang dùng: **{st.session_state.user_name}**")
 if st.sidebar.button("Đăng xuất"):
     st.session_state.logged_in = False
@@ -123,7 +124,7 @@ if st.session_state.user_role == "admin":
 else:
     menu = st.sidebar.radio("ĐỘI QLĐ", ["🛠️ Hiện trường (Seri)", "🚨 Báo Hỏng"])
 
-# --- 6. CHI TIẾT CHỨC NĂNG ---
+# --- 7. CHI TIẾT CHỨC NĂNG ---
 
 if menu == "📊 Giám sát & Dashboard":
     st.header("Dashboard Giám Sát Lưới")
@@ -134,7 +135,7 @@ if menu == "📊 Giám sát & Dashboard":
             st.plotly_chart(px.pie(df, names='Trạng_Thái_Luoi', title="Trạng thái Lưới"), use_container_width=True)
         with c2:
             df_chart = df.groupby(['Vị_Trí_Kho', 'Loại_VT']).size().reset_index(name='SL')
-            st.plotly_chart(px.bar(df_chart, x='Vị_Trí_Kho', y='SL', color='Loại_VT', title="Phân bổ vật tư (Tách màu theo loại)", barmode='group'), use_container_width=True)
+            st.plotly_chart(px.bar(df_chart, x='Vị_Trí_Kho', y='SL', color='Loại_VT', title="Phân bổ vật tư theo loại", barmode='group'), use_container_width=True)
         
         st.markdown("---")
         df.insert(0, "Xóa", False)
@@ -167,6 +168,7 @@ elif menu == "📥 Nhập Kho":
                         'ID_He_Thong': f"TN-{uuid.uuid4().hex[:8].upper()}", 
                         'Năm_SX': NAM_HIEN_TAI, 'Loại_VT': lvt, 'Mã_TB': mod, 'Số_Seri': 'Chưa nhập', 
                         'Nhà_CC': ncc, 'Nguồn_Nhap': ng, 'Vị_Trí_Kho': kh, 'Trạng_Thái_Luoi': 'Dưới kho', 
+                        'Mục_Đích': 'Dự phòng tại kho', 'Chi_Tiết_Vị_Trí': '---',
                         'Thoi_Gian_Tao': now, 'Thoi_Gian_Cap_Phat': '---'
                     })
                 confirm_dialog("nhap", pd.DataFrame(new_rows))
@@ -187,6 +189,7 @@ elif menu == "📥 Nhập Kho":
                         'Năm_SX': r['Năm_SX'], 'Loại_VT': str(r['Loại_VT']), 'Mã_TB': str(r['Mã_TB']), 
                         'Số_Seri': 'Chưa nhập', 'Nhà_CC': r['Nhà_CC'], 'Nguồn_Nhap': r['Nguồn_Nhap'], 
                         'Vị_Trí_Kho': CO_SO[0], 'Trạng_Thái_Luoi': 'Dưới kho', 
+                        'Mục_Đích': 'Dự phòng tại kho', 'Chi_Tiết_Vị_Trí': '---',
                         'Thoi_Gian_Tao': now, 'Thoi_Gian_Cap_Phat': '---'
                     })
             confirm_dialog("nhap", pd.DataFrame(ex_data))
@@ -234,8 +237,8 @@ elif menu == "🛠️ Hiện trường (Seri)":
     df_dv = st.session_state.inventory[st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name].copy()
     
     if not df_dv.empty:
-        # Bộ lọc loại vật tư để không bị gộp chung khó tìm
-        loai_chon = st.selectbox("🎯 Chọn loại vật tư cần cập nhật", ["Tất cả"] + list(df_dv['Loại_VT'].unique()))
+        # Lọc theo loại vật tư để không bị gộp chung
+        loai_chon = st.selectbox("🎯 Chọn loại vật tư", ["Tất cả"] + list(df_dv['Loại_VT'].unique()))
         df_display = df_dv if loai_chon == "Tất cả" else df_dv[df_dv['Loại_VT'] == loai_chon]
 
         t1, t2 = st.tabs(["✍️ Cập nhật tay", "📁 Excel Hiện trường"])
@@ -244,8 +247,8 @@ elif menu == "🛠️ Hiện trường (Seri)":
                 df_display[['ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí']],
                 column_config={
                     "Trạng_Thái_Luoi": st.column_config.SelectboxColumn("TT", options=TRANG_THAI_LIST),
-                    "Mục_Đích": st.column_config.TextColumn("Vị trí lắp (Nhập tay)"), # Đã đổi sang TextColumn để nhập tay
-                    "Chi_Tiết_Vị_Trí": st.column_config.TextColumn("Ghi chú")
+                    "Mục_Đích": st.column_config.TextColumn("Vị trí lắp (Nhập tay)"),
+                    "Chi_Tiết_Vị_Trí": st.column_config.TextColumn("Ghi chú chi tiết")
                 }, 
                 disabled=['ID_He_Thong', 'Loại_VT', 'Mã_TB'], 
                 use_container_width=True,
