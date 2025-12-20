@@ -75,20 +75,22 @@ if 'inventory' not in st.session_state:
 
 def save_all():
     engine = get_engine()
-    # 1. Chuyển tên cột về viết thường để khớp SQL
+    # Chuyển tên cột về dạng thường để khớp với SQL
     inv_save = st.session_state.inventory.copy()
     inv_save.columns = [c.lower() for c in inv_save.columns]
     
     req_save = st.session_state.requests.copy()
-    # Xử lý cột ID nếu có
-    if 'ID' in req_save.columns: 
-        req_save = req_save.drop(columns=['ID'])
+    if 'ID' in req_save.columns: req_save = req_save.drop(columns=['ID'])
     req_save.columns = [c.lower() for c in req_save.columns]
 
-    # 2. Sử dụng 'replace' nhưng phải ép kiểu hoặc kiểm tra kết nối
-    with engine.begin() as conn: # Dùng context manager để tự động COMMIT
-        inv_save.to_sql('inventory', conn, if_exists='replace', index=False)
-        req_save.to_sql('requests', conn, if_exists='replace', index=False)
+    # Dùng khối 'with' để đảm bảo dữ liệu được COMMIT (chốt hạ) xuống Database
+    try:
+        with engine.connect() as conn:
+            inv_save.to_sql('inventory', conn, if_exists='replace', index=False)
+            req_save.to_sql('requests', conn, if_exists='replace', index=False)
+            # Không cần conn.commit() vì to_sql tự xử lý, nhưng dùng context manager 'with' sẽ an toàn hơn
+    except Exception as e:
+        st.error(f"Lỗi khi lưu dữ liệu: {e}")
 
 # --- 4. TRUNG TÂM XÁC NHẬN ---
 @st.dialog("XÁC NHẬN NGHIỆP VỤ")
@@ -329,6 +331,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
