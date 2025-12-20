@@ -37,20 +37,19 @@ from sqlalchemy.pool import NullPool
 import streamlit as st
 
 def get_engine():
-    # Lấy biến từ st.secrets (thay vì os.getenv)
     conf = st.secrets["connections"]["supabase"]
     
+    # Tạo chuỗi kết nối từ các thông số mới
     USER = conf["user"]
     PASSWORD = conf["password"]
     HOST = conf["host"]
     PORT = conf["port"]
     DBNAME = conf["dbname"]
 
-    # Tạo chuỗi kết nối chuẩn PostgreSQL
+    # Sử dụng aws-1 và cổng 6543
     DATABASE_URL = f"postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DBNAME}?sslmode=require"
 
-    # QUAN TRỌNG: Khi dùng Transaction Pooler, nên dùng poolclass=NullPool 
-    # để tránh xung đột giữa thư viện và server như hướng dẫn trong code mẫu của bạn
+    # NullPool là bắt buộc khi dùng Transaction Pooler để tránh treo App
     return create_engine(DATABASE_URL, poolclass=NullPool)
     
 def load_data():
@@ -317,6 +316,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
