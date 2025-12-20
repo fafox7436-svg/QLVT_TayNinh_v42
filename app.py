@@ -35,7 +35,7 @@ def get_sample_excel(df):
 from sqlalchemy import create_engine
 
 # Khởi tạo kết nối qua engine SQLAlchemy (ổn định hơn cho việc ghi dữ liệu)
-ef get_engine():
+def get_engine():
     # Lấy thông tin từ Secrets
     conf = st.secrets["connections"]["supabase"]
     
@@ -316,6 +316,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
