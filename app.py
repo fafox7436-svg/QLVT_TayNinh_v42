@@ -53,21 +53,22 @@ def get_engine():
     return create_engine(DATABASE_URL, poolclass=NullPool)
     
 def load_data():
+    inv_cols = ['ID_He_Thong', 'Năm_SX', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Nhà_CC', 'Nguồn_Nhap', 'Vị_Trí_Kho', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí', 'Thoi_Gian_Tao', 'Thoi_Gian_Cap_Phat']
+    req_cols = ['ID', 'Thời_Gian_Báo', 'Đơn_Vị', 'Loại_VT', 'Tên_Vật_Tư', 'Nhà_CC', 'Chủng_Loại', 'Số_Lượng', 'Lý_Do', 'Trạng_Thái', 'Thời_Gian_Bù']
+    
     engine = get_engine()
     try:
-        # Đọc dữ liệu từ Supabase về DataFrame
         inv = pd.read_sql("SELECT * FROM inventory", engine)
         req = pd.read_sql("SELECT * FROM requests", engine)
         
-        # Chuyển tên cột từ viết thường (SQL) sang đúng định dạng App của bạn
-        inv.columns = ['ID_He_Thong', 'Năm_SX', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Nhà_CC', 'Nguồn_Nhap', 'Vị_Trí_Kho', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí', 'Thoi_Gian_Tao', 'Thoi_Gian_Cap_Phat']
-        req.columns = ['ID', 'Thời_Gian_Báo', 'Đơn_Vị', 'Loại_VT', 'Tên_Vật_Tư', 'Nhà_CC', 'Chủng_Loại', 'Số_Lượng', 'Lý_Do', 'Trạng_Thái', 'Thời_Gian_Bù']
-        
+        # Đồng bộ lại tên cột từ SQL (thường là viết thường) sang App
+        if not inv.empty: inv.columns = inv_cols
+        if not req.empty: req.columns = req_cols
+            
         return inv.fillna(""), req.fillna("")
     except Exception as e:
-        # Nếu bảng trống/chưa có dữ liệu, tạo DF rỗng với cột chuẩn
-        inv_cols = ['ID_He_Thong', 'Năm_SX', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Nhà_CC', 'Nguồn_Nhap', 'Vị_Trí_Kho', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí', 'Thoi_Gian_Tao', 'Thoi_Gian_Cap_Phat']
-        req_cols = ['Thời_Gian_Báo', 'Đơn_Vị', 'Loại_VT', 'Tên_Vật_Tư', 'Nhà_CC', 'Chủng_Loại', 'Số_Lượng', 'Lý_Do', 'Trạng_Thái', 'Thời_Gian_Bù']
+        # Nếu lỗi (ví dụ chưa có bảng), hiện thông báo thay vì im lặng xóa dữ liệu
+        st.warning(f"Chưa có dữ liệu cũ trên Cloud: {e}")
         return pd.DataFrame(columns=inv_cols), pd.DataFrame(columns=req_cols)
 
 if 'inventory' not in st.session_state:
@@ -75,22 +76,23 @@ if 'inventory' not in st.session_state:
 
 def save_all():
     engine = get_engine()
-    # Chuyển tên cột về dạng thường để khớp với SQL
+    # Chuyển tên cột về viết thường (SQL chuẩn)
     inv_save = st.session_state.inventory.copy()
     inv_save.columns = [c.lower() for c in inv_save.columns]
     
     req_save = st.session_state.requests.copy()
-    if 'ID' in req_save.columns: req_save = req_save.drop(columns=['ID'])
+    if 'ID' in req_save.columns: 
+        req_save = req_save.drop(columns=['ID'])
     req_save.columns = [c.lower() for c in req_save.columns]
 
-    # Dùng khối 'with' để đảm bảo dữ liệu được COMMIT (chốt hạ) xuống Database
     try:
-        with engine.connect() as conn:
+        # engine.begin() sẽ tự động COMMIT khi hoàn tất, giúp dữ liệu không bị mất khi F5
+        with engine.begin() as conn:
             inv_save.to_sql('inventory', conn, if_exists='replace', index=False)
             req_save.to_sql('requests', conn, if_exists='replace', index=False)
-            # Không cần conn.commit() vì to_sql tự xử lý, nhưng dùng context manager 'with' sẽ an toàn hơn
+        st.toast("✅ Đã đồng bộ dữ liệu xuống Database!")
     except Exception as e:
-        st.error(f"Lỗi khi lưu dữ liệu: {e}")
+        st.error(f"❌ Lỗi lưu dữ liệu: {e}")
 
 # --- 4. TRUNG TÂM XÁC NHẬN ---
 @st.dialog("XÁC NHẬN NGHIỆP VỤ")
@@ -323,6 +325,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
