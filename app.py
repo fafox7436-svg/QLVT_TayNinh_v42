@@ -38,13 +38,15 @@ from sqlalchemy import create_engine
 def get_engine():
     conf = st.secrets["connections"]["supabase"]
     user = str(conf['username']).strip()
-    # Mã hóa mật khẩu chứa ký tự @ thành %40
+    
+    # Mã hóa mật khẩu chứa ký tự đặc biệt @
     password = urllib.parse.quote_plus(str(conf['password']).strip())
+    
     host = str(conf['host']).strip()
     port = str(conf['port']).strip()
     database = str(conf['database']).strip()
     
-    # Chuỗi kết nối Pooler BẮT BUỘC có ?sslmode=require ở cuối
+    # Cổng 6543 yêu cầu tham số sslmode=require
     uri = f"postgresql://{user}:{password}@{host}:{port}/{database}?sslmode=require"
     
     return create_engine(uri, pool_pre_ping=True)
@@ -313,6 +315,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
