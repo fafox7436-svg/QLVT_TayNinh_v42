@@ -35,20 +35,22 @@ def get_sample_excel(df):
 from sqlalchemy.engine import URL
 
 def get_engine():
+    import urllib.parse  # Khai báo thư viện ngay tại đây để tránh lỗi 'not defined'
+    from sqlalchemy import create_engine
+    
     # Đọc thông tin từ Secrets
     conf = st.secrets["connections"]["supabase"]
     
     user = str(conf['username']).strip()
-    # MÃ HÓA MẬT KHẨU: Biến @ thành %40 để tránh lỗi ngắt chuỗi
+    # MÃ HÓA MẬT KHẨU: Chuyển ký tự @ thành mã %40 để tránh lỗi ngắt chuỗi Host
     password = urllib.parse.quote_plus(str(conf['password']).strip())
     host = str(conf['host']).strip()
     port = str(conf['port']).strip()
     database = str(conf['database']).strip()
     
-    # Tạo chuỗi kết nối an toàn
+    # Tạo chuỗi kết nối URI chuẩn cho PostgreSQL
     uri = f"postgresql://{user}:{password}@{host}:{port}/{database}"
     
-    from sqlalchemy import create_engine
     return create_engine(uri)
     
 def load_data():
@@ -315,6 +317,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
