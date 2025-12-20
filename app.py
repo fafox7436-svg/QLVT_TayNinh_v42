@@ -36,18 +36,18 @@ from sqlalchemy import create_engine
 
 # Khởi tạo kết nối qua engine SQLAlchemy (ổn định hơn cho việc ghi dữ liệu)
 def get_engine():
-    # Đọc trực tiếp từ st.secrets
+    # Đọc thông tin từ mục [connections.supabase] trong Secrets
     conf = st.secrets["connections"]["supabase"]
     
-    # Ép kiểu về chuỗi và loại bỏ mọi khoảng trắng hoặc ký tự thừa
+    # Làm sạch dữ liệu để tránh khoảng trắng hoặc ký tự lạ
     user = str(conf['username']).strip()
     pw = str(conf['password']).strip()
     host = str(conf['host']).strip()
     db = str(conf['database']).strip()
     port = str(conf['port']).strip()
     
-    # Tạo chuỗi kết nối (URI) đúng định dạng kỹ thuật
-    # Lưu ý: Không được tự ý thêm "TriLe@" vào trước biến host ở đây
+    # TẠO CHUỖI KẾT NỐI CHUẨN:
+    # Định dạng đúng phải là: postgresql://username:password@host:port/database
     uri = f"postgresql://{user}:{pw}@{host}:{port}/{db}"
     
     return create_engine(uri)
@@ -316,6 +316,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
