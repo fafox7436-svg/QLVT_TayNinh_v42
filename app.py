@@ -34,8 +34,6 @@ def get_sample_excel(df):
 # --- 3. QUẢN LÝ DỮ LIỆU (SUPABASE) ---
 from sqlalchemy.engine import URL
 
-import urllib.parse
-
 def get_engine():
     # Đọc thông tin từ Secrets
     conf = st.secrets["connections"]["supabase"]
@@ -317,6 +315,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
