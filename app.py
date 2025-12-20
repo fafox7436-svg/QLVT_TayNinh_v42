@@ -35,20 +35,20 @@ def get_sample_excel(df):
 from sqlalchemy import create_engine
 
 # Khởi tạo kết nối qua engine SQLAlchemy (ổn định hơn cho việc ghi dữ liệu)
-def get_engine():
-    # Đọc thông tin từ mục [connections.supabase] trong Secrets
+ef get_engine():
+    # Lấy thông tin từ Secrets
     conf = st.secrets["connections"]["supabase"]
     
-    # Làm sạch dữ liệu để tránh khoảng trắng hoặc ký tự lạ
-    user = str(conf['username']).strip()
-    pw = str(conf['password']).strip()
-    host = str(conf['host']).strip()
-    db = str(conf['database']).strip()
-    port = str(conf['port']).strip()
+    # Gán biến riêng biệt để kiểm soát
+    DB_USER = str(conf['username']).strip()
+    DB_PASS = str(conf['password']).strip()
+    DB_HOST = str(conf['host']).strip()
+    DB_PORT = str(conf['port']).strip()
+    DB_NAME = str(conf['database']).strip()
     
-    # TẠO CHUỖI KẾT NỐI CHUẨN:
-    # Định dạng đúng phải là: postgresql://username:password@host:port/database
-    uri = f"postgresql://{user}:{pw}@{host}:{port}/{db}"
+    # Tạo chuỗi kết nối chuẩn xác theo cấu trúc PostgreSQL
+    # Không được tự ý thêm bất kỳ chữ nào vào trước {DB_HOST}
+    uri = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     
     return create_engine(uri)
 
@@ -316,6 +316,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
