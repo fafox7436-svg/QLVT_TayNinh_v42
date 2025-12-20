@@ -270,17 +270,27 @@ elif menu == "🛠️ Hiện trường (Seri)":
 
         t1, t2 = st.tabs(["✍️ Cập nhật tay", "📁 Excel Hiện trường"])
         with t1:
-            edited = st.data_editor(
-                df_display[['ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí']],
-                column_config={
-                    "Trạng_Thái_Luoi": st.column_config.SelectboxColumn("TT", options=TRANG_THAI_LIST),
-                    "Mục_Đích": st.column_config.TextColumn("Vị trí lắp (Nhập tay)"),
-                    "Chi_Tiết_Vị_Trí": st.column_config.TextColumn("Ghi chú chi tiết")
-                }, 
-                disabled=['ID_He_Thong', 'Loại_VT', 'Mã_TB'], 
-                use_container_width=True,
-                key=f"edit_{loai_chon}"
-            )
+    edited = st.data_editor(
+        df_display[['ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí']],
+        column_config={
+            # Cấu hình lại cột Trạng thái lưới thành danh sách chọn
+            "Trạng_Thái_Luoi": st.column_config.SelectboxColumn(
+                "Trạng thái", 
+                options=TRANG_THAI_LIST,
+                required=True
+            ),
+            # Cấu hình lại cột Mục đích thành danh sách chọn (Đây là chỗ bạn đang thiếu)
+            "Mục_Đích": st.column_config.SelectboxColumn(
+                "Mục đích sử dụng",
+                options=MUC_DICH_LIST,
+                required=True
+            ),
+            "Chi_Tiết_Vị_Trí": st.column_config.TextColumn("Ghi chú chi tiết")
+        }, 
+        disabled=['ID_He_Thong', 'Loại_VT', 'Mã_TB'], 
+        use_container_width=True,
+        key=f"edit_{loai_chon}"
+    )
             if st.button("💾 Lưu thay đổi hiện trường"):
                 confirm_dialog("hien_truong", edited)
         with t2:
@@ -319,6 +329,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
