@@ -37,17 +37,20 @@ from sqlalchemy.engine import URL
 import urllib.parse
 
 def get_engine():
+    # Đọc thông tin từ Secrets
     conf = st.secrets["connections"]["supabase"]
     
     user = str(conf['username']).strip()
-    # Mã hóa mật khẩu để xử lý ký tự @
+    # MÃ HÓA MẬT KHẨU: Biến @ thành %40 để tránh lỗi ngắt chuỗi
     password = urllib.parse.quote_plus(str(conf['password']).strip())
     host = str(conf['host']).strip()
     port = str(conf['port']).strip()
     database = str(conf['database']).strip()
     
-    # Tạo chuỗi kết nối URI đã được mã hóa an toàn
+    # Tạo chuỗi kết nối an toàn
     uri = f"postgresql://{user}:{password}@{host}:{port}/{database}"
+    
+    from sqlalchemy import create_engine
     return create_engine(uri)
     
 def load_data():
@@ -314,6 +317,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
