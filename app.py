@@ -36,17 +36,20 @@ from sqlalchemy import create_engine
 
 # Khởi tạo kết nối qua engine SQLAlchemy (ổn định hơn cho việc ghi dữ liệu)
 def get_engine():
-    # Cách này sẽ lấy trực tiếp chuỗi kết nối từ Secrets nếu bạn dán nguyên văn
-    # connection_string trên Supabase (mục Settings -> Database -> Connection String -> URI)
+    # Đọc trực tiếp từ st.secrets
     conf = st.secrets["connections"]["supabase"]
     
-    # Nếu bạn dùng cách cũ, hãy chắc chắn các biến không bị thừa dấu cách
-    user = conf['username'].strip()
-    pw = conf['password'].strip()
-    host = conf['host'].strip()
-    db = conf['database'].strip()
+    # Ép kiểu về chuỗi và loại bỏ mọi khoảng trắng hoặc ký tự thừa
+    user = str(conf['username']).strip()
+    pw = str(conf['password']).strip()
+    host = str(conf['host']).strip()
+    db = str(conf['database']).strip()
+    port = str(conf['port']).strip()
     
-    uri = f"postgresql://{user}:{pw}@{host}:5432/{db}"
+    # Tạo chuỗi kết nối (URI) đúng định dạng kỹ thuật
+    # Lưu ý: Không được tự ý thêm "TriLe@" vào trước biến host ở đây
+    uri = f"postgresql://{user}:{pw}@{host}:{port}/{db}"
+    
     return create_engine(uri)
 
 def load_data():
@@ -313,6 +316,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
