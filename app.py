@@ -34,21 +34,22 @@ def get_sample_excel(df):
 # --- 3. QUẢN LÝ DỮ LIỆU (SUPABASE) ---
 from sqlalchemy.engine import URL
 
+import urllib.parse
+
 def get_engine():
     conf = st.secrets["connections"]["supabase"]
     
-    # Tạo cấu trúc kết nối an toàn với mật khẩu có ký tự đặc biệt
-    url_object = URL.create(
-        "postgresql",
-        username=str(conf['username']).strip(),
-        password=str(conf['password']).strip(), # Xử lý an toàn ký tự @ trong mật khẩu
-        host=str(conf['host']).strip(),
-        port=int(conf['port']),
-        database=str(conf['database']).strip(),
-    )
+    user = str(conf['username']).strip()
+    # Mã hóa mật khẩu để xử lý ký tự @
+    password = urllib.parse.quote_plus(str(conf['password']).strip())
+    host = str(conf['host']).strip()
+    port = str(conf['port']).strip()
+    database = str(conf['database']).strip()
     
-    return create_engine(url_object)
-
+    # Tạo chuỗi kết nối URI đã được mã hóa an toàn
+    uri = f"postgresql://{user}:{password}@{host}:{port}/{database}"
+    return create_engine(uri)
+    
 def load_data():
     engine = get_engine()
     try:
@@ -313,6 +314,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
