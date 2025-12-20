@@ -2,5 +2,6 @@ streamlit
 pandas
 plotly
 xlsxwriter
-st-gsheets-connection
 openpyxl
+sqlalchemy
+psycopg2-binary
