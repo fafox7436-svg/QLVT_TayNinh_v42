@@ -75,17 +75,20 @@ if 'inventory' not in st.session_state:
 
 def save_all():
     engine = get_engine()
-    # Chuyển tên cột về dạng thường để khớp với SQL trước khi ghi đè
+    # 1. Chuyển tên cột về viết thường để khớp SQL
     inv_save = st.session_state.inventory.copy()
-    inv_save.columns = [c.lower().replace(" ", "_") for c in inv_save.columns]
+    inv_save.columns = [c.lower() for c in inv_save.columns]
     
     req_save = st.session_state.requests.copy()
-    if 'ID' in req_save.columns: req_save = req_save.drop(columns=['ID'])
-    req_save.columns = [c.lower().replace(" ", "_") for c in req_save.columns]
+    # Xử lý cột ID nếu có
+    if 'ID' in req_save.columns: 
+        req_save = req_save.drop(columns=['ID'])
+    req_save.columns = [c.lower() for c in req_save.columns]
 
-    # Ghi đè dữ liệu (Tránh lỗi Duplicate)
-    inv_save.to_sql('inventory', engine, if_exists='replace', index=False)
-    req_save.to_sql('requests', engine, if_exists='replace', index=False)
+    # 2. Sử dụng 'replace' nhưng phải ép kiểu hoặc kiểm tra kết nối
+    with engine.begin() as conn: # Dùng context manager để tự động COMMIT
+        inv_save.to_sql('inventory', conn, if_exists='replace', index=False)
+        req_save.to_sql('requests', conn, if_exists='replace', index=False)
 
 # --- 4. TRUNG TÂM XÁC NHẬN ---
 @st.dialog("XÁC NHẬN NGHIỆP VỤ")
@@ -316,6 +319,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
