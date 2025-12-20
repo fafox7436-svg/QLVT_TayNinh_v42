@@ -266,33 +266,25 @@ elif menu == "🛠️ Hiện trường (Seri)":
     df_dv = st.session_state.inventory[st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name].copy()
     
     if not df_dv.empty:
-        # Lọc theo loại vật tư để không bị gộp chung
         loai_chon = st.selectbox("🎯 Chọn loại vật tư", ["Tất cả"] + list(df_dv['Loại_VT'].unique()))
         df_display = df_dv if loai_chon == "Tất cả" else df_dv[df_dv['Loại_VT'] == loai_chon]
 
         t1, t2 = st.tabs(["✍️ Cập nhật tay", "📁 Excel Hiện trường"])
         with t1:
-    edited = st.data_editor(
-        df_display[['ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí']],
-        column_config={
-            # Cấu hình lại cột Trạng thái lưới thành danh sách chọn
-            "Trạng_Thái_Luoi": st.column_config.SelectboxColumn(
-                "Trạng thái", 
-                options=TRANG_THAI_LIST,
-                required=True
-            ),
-            # Cấu hình lại cột Mục đích thành danh sách chọn (Đây là chỗ bạn đang thiếu)
-            "Mục_Đích": st.column_config.SelectboxColumn(
-                "Mục đích sử dụng",
-                options=MUC_DICH_LIST,
-                required=True
-            ),
-            "Chi_Tiết_Vị_Trí": st.column_config.TextColumn("Ghi chú chi tiết")
-        }, 
-        disabled=['ID_He_Thong', 'Loại_VT', 'Mã_TB'], 
-        use_container_width=True,
-        key=f"edit_{loai_chon}"
-    )
+            # DÒNG NÀY PHẢI THỤT LỀ VÀO (Dòng 275)
+            edited = st.data_editor(
+                df_display[['ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí']],
+                column_config={
+                    "Trạng_Thái_Luoi": st.column_config.SelectboxColumn("TT", options=TRANG_THAI_LIST),
+                    # KHÔI PHỤC TÍNH NĂNG CHỌN MỤC ĐÍCH TẠI ĐÂY
+                    "Mục_Đích": st.column_config.SelectboxColumn("Mục đích", options=MUC_DICH_LIST),
+                    "Chi_Tiết_Vị_Trí": st.column_config.TextColumn("Ghi chú chi tiết")
+                }, 
+                disabled=['ID_He_Thong', 'Loại_VT', 'Mã_TB'], 
+                use_container_width=True,
+                key=f"edit_{loai_chon}"
+            )
+            # Dòng nút bấm cũng phải thụt lề vào để nằm trong 'with t1'
             if st.button("💾 Lưu thay đổi hiện trường"):
                 confirm_dialog("hien_truong", edited)
         with t2:
@@ -331,6 +323,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
