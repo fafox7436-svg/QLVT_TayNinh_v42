@@ -5,7 +5,6 @@ import datetime
 import io
 import os
 import uuid
-from streamlit_gsheets import GSheetsConnection
 
 # --- 1. CẤU HÌNH HỆ THỐNG ---
 st.set_page_config(page_title="Hệ thống QLVT PC Tây Ninh - v42 Full Sync GS", layout="wide")
@@ -314,6 +313,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
