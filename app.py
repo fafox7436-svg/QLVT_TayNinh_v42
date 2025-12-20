@@ -32,36 +32,49 @@ def get_sample_excel(df):
         df.to_excel(writer, index=False)
     return output.getvalue()
 
-# --- 3. QUẢN LÝ DỮ LIỆU (GOOGLE SHEETS) ---
-# Kết nối Google Sheets qua GSheetsConnection
-conn = st.connection("gsheets", type=GSheetsConnection)
+# --- 3. QUẢN LÝ DỮ LIỆU (SUPABASE) ---
+from sqlalchemy import create_engine
+
+# Khởi tạo kết nối qua engine SQLAlchemy (ổn định hơn cho việc ghi dữ liệu)
+def get_engine():
+    conf = st.secrets["connections"]["supabase"]
+    uri = f"postgresql://{conf['username']}:{conf['password']}@{conf['host']}:{conf['port']}/{conf['database']}"
+    return create_engine(uri)
 
 def load_data():
-    inv_cols = ['ID_He_Thong', 'Năm_SX', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Nhà_CC', 'Nguồn_Nhap', 'Vị_Trí_Kho', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí', 'Thoi_Gian_Tao', 'Thoi_Gian_Cap_Phat']
-    req_cols = ['Thời_Gian_Báo', 'Đơn_Vị', 'Loại_VT', 'Tên_Vật_Tư', 'Nhà_CC', 'Chủng_Loại', 'Số_Lượng', 'Lý_Do', 'Trạng_Thái', 'Thời_Gian_Bù']
-    
+    engine = get_engine()
     try:
-        # Thêm tham số spreadsheet để chỉ định rõ file nếu cần
-        inv = conn.read(worksheet="Inventory", ttl=0)
-        req = conn.read(worksheet="Requests", ttl=0)
+        # Đọc dữ liệu từ Supabase về DataFrame
+        inv = pd.read_sql("SELECT * FROM inventory", engine)
+        req = pd.read_sql("SELECT * FROM requests", engine)
         
-        # Nếu sheet tồn tại nhưng rỗng, gán lại cột chuẩn
-        if inv.empty: inv = pd.DataFrame(columns=inv_cols)
-        if req.empty: req = pd.DataFrame(columns=req_cols)
+        # Chuyển tên cột từ viết thường (SQL) sang đúng định dạng App của bạn
+        inv.columns = ['ID_He_Thong', 'Năm_SX', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Nhà_CC', 'Nguồn_Nhap', 'Vị_Trí_Kho', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí', 'Thoi_Gian_Tao', 'Thoi_Gian_Cap_Phat']
+        req.columns = ['ID', 'Thời_Gian_Báo', 'Đơn_Vị', 'Loại_VT', 'Tên_Vật_Tư', 'Nhà_CC', 'Chủng_Loại', 'Số_Lượng', 'Lý_Do', 'Trạng_Thái', 'Thời_Gian_Bù']
+        
+        return inv.fillna(""), req.fillna("")
     except Exception as e:
-        st.error(f"Lỗi kết nối Sheet: {e}. Vui lòng kiểm tra tên tab Inventory và Requests.")
-        inv = pd.DataFrame(columns=inv_cols)
-        req = pd.DataFrame(columns=req_cols)
-    
-    return inv.fillna(""), req.fillna("")
+        # Nếu bảng trống/chưa có dữ liệu, tạo DF rỗng với cột chuẩn
+        inv_cols = ['ID_He_Thong', 'Năm_SX', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Nhà_CC', 'Nguồn_Nhap', 'Vị_Trí_Kho', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí', 'Thoi_Gian_Tao', 'Thoi_Gian_Cap_Phat']
+        req_cols = ['Thời_Gian_Báo', 'Đơn_Vị', 'Loại_VT', 'Tên_Vật_Tư', 'Nhà_CC', 'Chủng_Loại', 'Số_Lượng', 'Lý_Do', 'Trạng_Thái', 'Thời_Gian_Bù']
+        return pd.DataFrame(columns=inv_cols), pd.DataFrame(columns=req_cols)
 
 if 'inventory' not in st.session_state:
     st.session_state.inventory, st.session_state.requests = load_data()
 
 def save_all():
-    # Cập nhật trực tiếp lên Google Sheets
-    conn.update(worksheet="Inventory", data=st.session_state.inventory)
-    conn.update(worksheet="Requests", data=st.session_state.requests)
+    engine = get_engine()
+    # Chuyển tên cột về dạng thường để khớp với SQL trước khi ghi đè
+    inv_save = st.session_state.inventory.copy()
+    inv_save.columns = [c.lower().replace(" ", "_") for c in inv_save.columns]
+    
+    req_save = st.session_state.requests.copy()
+    if 'ID' in req_save.columns: req_save = req_save.drop(columns=['ID'])
+    req_save.columns = [c.lower().replace(" ", "_") for c in req_save.columns]
+
+    # Ghi đè dữ liệu (Tránh lỗi Duplicate)
+    inv_save.to_sql('inventory', engine, if_exists='replace', index=False)
+    req_save.to_sql('requests', engine, if_exists='replace', index=False)
 
 # --- 4. TRUNG TÂM XÁC NHẬN ---
 @st.dialog("XÁC NHẬN NGHIỆP VỤ")
@@ -292,4 +305,5 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
