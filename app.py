@@ -36,27 +36,18 @@ import urllib.parse
 from sqlalchemy import create_engine
 
 def get_engine():
-    import urllib.parse
-    from sqlalchemy import create_engine
-    
     conf = st.secrets["connections"]["supabase"]
     user = str(conf['username']).strip()
-    # Mã hóa mật khẩu có dấu @
+    # Mã hóa mật khẩu chứa ký tự @ thành %40
     password = urllib.parse.quote_plus(str(conf['password']).strip())
     host = str(conf['host']).strip()
     port = str(conf['port']).strip()
     database = str(conf['database']).strip()
     
-    # Chuỗi kết nối Pooler BẮT BUỘC có ?sslmode=require
+    # Chuỗi kết nối Pooler BẮT BUỘC có ?sslmode=require ở cuối
     uri = f"postgresql://{user}:{password}@{host}:{port}/{database}?sslmode=require"
     
-    # Sử dụng Pool size nhỏ (dưới 15 như trong hình image_1adea2.png)
-    return create_engine(
-        uri, 
-        pool_size=5, 
-        max_overflow=10,
-        pool_pre_ping=True
-    )
+    return create_engine(uri, pool_pre_ping=True)
     
 def load_data():
     engine = get_engine()
@@ -322,6 +313,7 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+
 
 
 
