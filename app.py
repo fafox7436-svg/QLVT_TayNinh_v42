@@ -237,7 +237,15 @@ st.sidebar.markdown("---") # Đường kẻ ngang phân cách cho đẹp
 
 # 2. Menu chức năng (Đã cập nhật thêm mục Hoàn trả)
 if st.session_state.user_role == "admin":
-    menu = st.sidebar.radio("CÔNG TY", ["📊 Giám sát & Dashboard", "📂 Quản lý Văn bản", "📥 Nhập Kho", "🚚 Cấp Phát", "🚨 Duyệt Báo Hỏng", "🔄 Kho Bảo Hành/Hoàn Trả"])
+    menu = st.sidebar.radio("CÔNG TY", [
+        "📊 Giám sát & Dashboard", 
+        "📂 Quản lý Văn bản", 
+        "📥 Nhập Kho", 
+        "🚚 Cấp Phát", 
+        "🚨 Duyệt Báo Hỏng", 
+        "🔄 Kho Bảo Hành/Hoàn Trả",
+        "📜 Nhật ký Hoạt động"  # <--- BỔ SUNG DÒNG NÀY
+    ])
 else:
     menu = st.sidebar.radio("ĐỘI QLĐ", ["🛠️ Hiện trường (Seri)", "🚨 Báo Hỏng", "📦 Hoàn Trả/Bảo Hành"])
 # --- 7. CHI TIẾT CHỨC NĂNG ---
@@ -610,18 +618,20 @@ elif menu == "📂 Quản lý Văn bản":
         st.error(f"Chưa tạo bảng documents hoặc lỗi kết nối: {e}")
 
 # Thêm vào menu của Admin
-if menu == "📜 Nhật ký Hoạt động":
+# --- Nối tiếp vào các elif bên trên ---
+elif menu == "📜 Nhật ký Hoạt động":
     st.header("Nhật Ký Truy Vết Hệ Thống")
     
-    # Bộ lọc ngày tháng (Tùy chọn)
+    # Bộ lọc ngày tháng
     d = st.date_input("Chọn ngày xem log", datetime.date.today())
     
     engine = get_engine()
     try:
-        # Load dữ liệu từ bảng log, sắp xếp mới nhất lên đầu
+        # Load dữ liệu từ bảng log
         df_log = pd.read_sql("SELECT * FROM nhat_ky_he_thong ORDER BY id DESC LIMIT 500", engine)
         
         if not df_log.empty:
+            # Hiển thị bảng log
             st.dataframe(df_log, use_container_width=True, hide_index=True)
             
             # Nút tải về báo cáo log
@@ -633,7 +643,8 @@ if menu == "📜 Nhật ký Hoạt động":
         else:
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
-        st.error("Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase.")
+        st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
