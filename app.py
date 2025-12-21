@@ -51,7 +51,28 @@ def get_engine():
 
     # NullPool là bắt buộc khi dùng Transaction Pooler để tránh treo App
     return create_engine(DATABASE_URL, poolclass=NullPool)
-    
+
+# --- HÀM GHI NHẬT KÝ HOẠT ĐỘNG ---
+def luu_nhat_ky(hanh_dong, noi_dung):
+    try:
+        engine = get_engine()
+        now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        user = st.session_state.user_name if 'user_name' in st.session_state else "Unknown"
+        
+        log_df = pd.DataFrame([{
+            'thoi_gian': now,
+            'nguoi_thuc_hien': user,
+            'hanh_dong': hanh_dong,
+            'noi_dung_chi_tiet': noi_dung
+        }])
+        
+        # Dùng 'append' để ghi nối tiếp, không xóa dữ liệu cũ
+        with engine.begin() as conn:
+            log_df.to_sql('nhat_ky_he_thong', conn, if_exists='append', index=False)
+            
+    except Exception as e:
+        print(f"Lỗi ghi nhật ký: {e}")
+
 def load_data():
     # Định nghĩa danh sách cột chuẩn của App (Có dấu, viết hoa)
     inv_cols = ['ID_He_Thong', 'Năm_SX', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Nhà_CC', 'Nguồn_Nhap', 'Vị_Trí_Kho', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí', 'Thoi_Gian_Tao', 'Thoi_Gian_Cap_Phat']
@@ -141,33 +162,50 @@ if 'inventory' not in st.session_state:
 # --- 4. TRUNG TÂM XÁC NHẬN ---
 @st.dialog("XÁC NHẬN NGHIỆP VỤ")
 def confirm_dialog(action, data=None):
-    st.warning("⚠️ Hệ thống yêu cầu xác nhận để ghi dữ liệu lên Google Sheets.")
-    if st.button("✅ XÁC NHẬN", use_container_width=True):
+    st.warning("⚠️ Xác nhận thực hiện giao dịch?")
+    if st.button("✅ ĐỒNG Ý", use_container_width=True):
         now_s = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         
         if action == "nhap":
             st.session_state.inventory = pd.concat([st.session_state.inventory, data], ignore_index=True)
+            # GHI NHẬT KÝ
+            sl = len(data)
+            loai = data.iloc[0]['Loại_VT'] if not data.empty else ""
+            luu_nhat_ky("Nhập kho", f"Nhập mới {sl} {loai} vào {data.iloc[0]['Vị_Trí_Kho']}")
+            
         elif action == "xoa":
             st.session_state.inventory = st.session_state.inventory[~st.session_state.inventory['ID_He_Thong'].isin(data)]
+            luu_nhat_ky("Xóa dữ liệu", f"Đã xóa vĩnh viễn {len(data)} dòng dữ liệu")
+            
         elif action == "cap_phat":
             for _, r in data.iterrows():
                 mask = (st.session_state.inventory['Vị_Trí_Kho'] == str(r['Từ_Kho'])) & (st.session_state.inventory['Mã_TB'] == str(r['Mã_TB']))
                 idx = st.session_state.inventory[mask].head(int(r['Số_Lượng'])).index
                 st.session_state.inventory.loc[idx, 'Vị_Trí_Kho'] = str(r['Đến_Đơn_Vị'])
                 st.session_state.inventory.loc[idx, 'Thoi_Gian_Cap_Phat'] = now_s
+                
+                # GHI NHẬT KÝ
+                luu_nhat_ky("Điều chuyển/Cấp phát", f"Chuyển {r['Số_Lượng']} {r['Mã_TB']} từ {r['Từ_Kho']} sang {r['Đến_Đơn_Vị']}")
+                
         elif action == "hien_truong":
             for _, row in data.iterrows():
                 target_id = str(row['ID_He_Thong'])
                 st.session_state.inventory.loc[st.session_state.inventory['ID_He_Thong'] == target_id, 
                 ['Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí']] = row[['Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí']].values
+            
+            luu_nhat_ky("Cập nhật hiện trường", f"Cập nhật thông tin cho {len(data)} thiết bị tại {st.session_state.user_name}")
+
         elif action == "bao_hong":
             st.session_state.requests = pd.concat([st.session_state.requests, data], ignore_index=True)
+            luu_nhat_ky("Báo hỏng", f"Đơn vị {st.session_state.user_name} báo hỏng {len(data)} thiết bị")
+            
         elif action == "duyet_hong":
             st.session_state.requests.loc[data, 'Trạng_Thái'] = "Đã bù hàng"
             st.session_state.requests.loc[data, 'Thời_Gian_Bù'] = now_s
+            luu_nhat_ky("Duyệt bảo hành", f"Admin đã duyệt bù hàng cho {len(data)} yêu cầu")
             
         save_all()
-        st.success("Dữ liệu đã được đồng bộ trực tuyến!")
+        st.success("Đã xử lý và lưu nhật ký!")
         st.rerun()
 
 # --- 5. ĐĂNG NHẬP ---
@@ -570,6 +608,33 @@ elif menu == "📂 Quản lý Văn bản":
             st.info("Chưa có văn bản nào được lưu.")
     except Exception as e:
         st.error(f"Chưa tạo bảng documents hoặc lỗi kết nối: {e}")
+
+# Thêm vào menu của Admin
+if menu == "📜 Nhật ký Hoạt động":
+    st.header("Nhật Ký Truy Vết Hệ Thống")
+    
+    # Bộ lọc ngày tháng (Tùy chọn)
+    d = st.date_input("Chọn ngày xem log", datetime.date.today())
+    
+    engine = get_engine()
+    try:
+        # Load dữ liệu từ bảng log, sắp xếp mới nhất lên đầu
+        df_log = pd.read_sql("SELECT * FROM nhat_ky_he_thong ORDER BY id DESC LIMIT 500", engine)
+        
+        if not df_log.empty:
+            st.dataframe(df_log, use_container_width=True, hide_index=True)
+            
+            # Nút tải về báo cáo log
+            st.download_button(
+                "📥 Tải Nhật ký (.xlsx)",
+                get_sample_excel(df_log),
+                f"Nhat_Ky_He_Thong_{d}.xlsx"
+            )
+        else:
+            st.info("Chưa có nhật ký nào.")
+    except Exception as e:
+        st.error("Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase.")
+
 
 
 
