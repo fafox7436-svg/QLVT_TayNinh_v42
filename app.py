@@ -100,6 +100,44 @@ def load_data():
         # Trả về bảng rỗng với tên cột ĐÚNG CHUẨN để không bị lỗi KeyError
         return pd.DataFrame(columns=inv_cols), pd.DataFrame(columns=req_cols)
 
+# --- BỔ SUNG HÀM LƯU DỮ LIỆU (QUAN TRỌNG) ---
+def save_all():
+    engine = get_engine()
+    # Chuyển tên cột về viết thường (SQL chuẩn)
+    inv_save = st.session_state.inventory.copy()
+    # Map ngược từ Tên App -> Tên SQL
+    map_inv_inv = {
+        'ID_He_Thong': 'id_he_thong', 'Năm_SX': 'nam_sx', 'Loại_VT': 'loai_vt', 
+        'Mã_TB': 'ma_tb', 'Số_Seri': 'so_seri', 'Nhà_CC': 'nha_cc', 
+        'Nguồn_Nhap': 'nguon_nhap', 'Vị_Trí_Kho': 'vi_tri_kho', 
+        'Trạng_Thái_Luoi': 'trang_thai_luoi', 'Mục_Đích': 'muc_dich', 
+        'Chi_Tiết_Vị_Trí': 'chi_tiet_vi_tri', 'Thoi_Gian_Tao': 'thoi_gian_tao', 
+        'Thoi_Gian_Cap_Phat': 'thoi_gian_cap_phat'
+    }
+    inv_save.rename(columns=map_inv_inv, inplace=True)
+    
+    req_save = st.session_state.requests.copy()
+    if 'ID' in req_save.columns: req_save = req_save.drop(columns=['ID'])
+    map_req_inv = {
+        'Thời_Gian_Báo': 'thoi_gian_bao', 'Đơn_Vị': 'don_vi',
+        'Loại_VT': 'loai_vt', 'Tên_Vật_Tư': 'ten_vat_tu', 'Nhà_CC': 'nha_cc',
+        'Chủng_Loại': 'chung_loai', 'Số_Lượng': 'so_luong', 'Lý_Do': 'ly_do',
+        'Trạng_Thái': 'trang_thai', 'Thời_Gian_Bù': 'thoi_gian_bu'
+    }
+    req_save.rename(columns=map_req_inv, inplace=True)
+
+    try:
+        # Dùng Transaction để đảm bảo an toàn dữ liệu
+        with engine.begin() as conn:
+            inv_save.to_sql('inventory', conn, if_exists='replace', index=False)
+            req_save.to_sql('requests', conn, if_exists='replace', index=False)
+    except Exception as e:
+        st.error(f"❌ Lỗi lưu dữ liệu: {e}")
+
+# --- KHỞI TẠO DỮ LIỆU (BẮT BUỘC PHẢI CÓ) ---
+if 'inventory' not in st.session_state:
+    st.session_state.inventory, st.session_state.requests = load_data()
+
 # --- 4. TRUNG TÂM XÁC NHẬN ---
 @st.dialog("XÁC NHẬN NGHIỆP VỤ")
 def confirm_dialog(action, data=None):
@@ -532,6 +570,7 @@ elif menu == "📂 Quản lý Văn bản":
             st.info("Chưa có văn bản nào được lưu.")
     except Exception as e:
         st.error(f"Chưa tạo bảng documents hoặc lỗi kết nối: {e}")
+
 
 
 
