@@ -378,7 +378,6 @@ elif menu == "📦 Hoàn Trả/Bảo Hành":
     else:
         st.success("Kho của đơn vị hiện đang trống, không có gì để trả.")
 
-
 # --- CHỨC NĂNG DÀNH CHO ADMIN: NHẬN HÀNG TRẢ VỀ ---
 elif menu == "🔄 Kho Bảo Hành/Hoàn Trả":
     st.header("🔄 Quản lý Nhập kho Hoàn trả/Bảo hành")
@@ -440,6 +439,7 @@ elif menu == "🔄 Kho Bảo Hành/Hoàn Trả":
                 st.warning("Vui lòng tích chọn thiết bị đã nhận thực tế.")
     else:
         st.info("✅ Hiện không có yêu cầu hoàn trả nào đang chờ xử lý.")
+
 
 
 
