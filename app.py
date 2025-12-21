@@ -155,7 +155,7 @@ st.sidebar.markdown("---") # Đường kẻ ngang phân cách cho đẹp
 
 # 2. Menu chức năng (Đã cập nhật thêm mục Hoàn trả)
 if st.session_state.user_role == "admin":
-    menu = st.sidebar.radio("CÔNG TY", ["📊 Giám sát & Dashboard", "📥 Nhập Kho", "🚚 Cấp Phát", "🚨 Duyệt Báo Hỏng", "🔄 Kho Bảo Hành/Hoàn Trả"])
+    menu = st.sidebar.radio("CÔNG TY", ["📊 Giám sát & Dashboard", "📂 Quản lý Văn bản", "📥 Nhập Kho", "🚚 Cấp Phát", "🚨 Duyệt Báo Hỏng", "🔄 Kho Bảo Hành/Hoàn Trả"])
 else:
     menu = st.sidebar.radio("ĐỘI QLĐ", ["🛠️ Hiện trường (Seri)", "🚨 Báo Hỏng", "📦 Hoàn Trả/Bảo Hành"])
 # --- 7. CHI TIẾT CHỨC NĂNG ---
@@ -385,66 +385,175 @@ elif menu == "📦 Hoàn Trả/Bảo Hành":
         st.success("Kho của đơn vị hiện đang trống, không có gì để trả.")
 
 # --- CHỨC NĂNG DÀNH CHO ADMIN: NHẬN HÀNG TRẢ VỀ ---
-elif menu == "🔄 Kho Bảo Hành/Hoàn Trả":
-    st.header("🔄 Quản lý Nhập kho Hoàn trả/Bảo hành")
+elif menu == "📦 Hoàn Trả/Bảo Hành":
+    st.header(f"📦 Yêu cầu Hoàn trả / Bảo hành: {st.session_state.user_name}")
     
-    # Lọc ra các vật tư đang ở trạng thái "ĐANG CHUYỂN"
-    # Nghĩa là Đội đã bấm gửi, nhưng Kho chưa bấm nhận
-    mask_pending = st.session_state.inventory['Vị_Trí_Kho'].str.contains("ĐANG CHUYỂN", na=False)
-    df_return = st.session_state.inventory[mask_pending].copy()
+    # Chia tab
+    t1, t2 = st.tabs(["✍️ Chọn từ danh sách", "📁 Nạp từ Excel"])
     
-    if not df_return.empty:
-        st.warning(f"🔔 Có {len(df_return)} thiết bị đang được chuyển về kho.")
-        
-        df_return.insert(0, "Xác nhận", False)
-        
-        # Hiển thị bảng duyệt
-        cols_admin = ['Xác nhận', 'ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Vị_Trí_Kho', 'Chi_Tiết_Vị_Trí']
-        
-        edited_admin = st.data_editor(
-            df_return[cols_admin],
-            column_config={
-                "Xác nhận": st.column_config.CheckboxColumn("Đã nhận hàng?", default=False),
-                "Vị_Trí_Kho": st.column_config.TextColumn("Trạng thái chuyển"),
-                "Chi_Tiết_Vị_Trí": st.column_config.TextColumn("Lý do & Nguồn gốc", width="medium"),
-            },
-            use_container_width=True,
-            disabled=[c for c in cols_admin if c != "Xác nhận"],
-            key="admin_return_editor"
-        )
-        
-        if st.button("✅ Xác nhận Nhập kho"):
-            to_confirm = edited_admin[edited_admin["Xác nhận"] == True]
-            
-            if not to_confirm.empty:
-                for _, row in to_confirm.iterrows():
-                    target_id = row['ID_He_Thong']
-                    current_status_str = row['Vị_Trí_Kho'] # Ví dụ: "ĐANG CHUYỂN: PC Tây Ninh - Cơ sở 1"
-                    
-                    # Tách chuỗi để lấy tên kho đích thực sự
-                    real_warehouse = current_status_str.split(": ")[-1] if ": " in current_status_str else CO_SO[0]
-                    
-                    # Cập nhật vào kho chính thức
-                    idx = st.session_state.inventory[st.session_state.inventory['ID_He_Thong'] == target_id].index
-                    st.session_state.inventory.loc[idx, 'Vị_Trí_Kho'] = real_warehouse
-                    
-                    # Nếu lý do là Hỏng -> Trạng thái: Chờ bảo hành
-                    # Nếu lý do là Thừa -> Trạng thái: Dưới kho
-                    note = str(row['Chi_Tiết_Vị_Trí'])
-                    if "hỏng" in note.lower() or "lỗi" in note.lower() or "bảo hành" in note.lower():
-                        st.session_state.inventory.loc[idx, 'Trạng_Thái_Luoi'] = "Chờ bảo hành/Sửa chữa"
-                        st.session_state.inventory.loc[idx, 'Mục_Đích'] = "Hàng lỗi chờ xử lý"
-                    else:
-                        st.session_state.inventory.loc[idx, 'Trạng_Thái_Luoi'] = "Dưới kho"
-                        st.session_state.inventory.loc[idx, 'Mục_Đích'] = "Thu hồi về kho"
+    # --- TAB 1: CHỌN TAY (Code cũ đã sửa lại chút cho gọn) ---
+    with t1:
+        df_dv = st.session_state.inventory[st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name].copy()
+        if not df_dv.empty:
+            df_dv.insert(0, "Chọn", False)
+            cols_show = ['Chọn', 'ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi']
+            edited_return = st.data_editor(
+                df_dv[cols_show],
+                column_config={
+                    "Chọn": st.column_config.CheckboxColumn("Trả về?", default=False),
+                    "Mã_TB": st.column_config.TextColumn("Model/Mã TB"),
+                },
+                use_container_width=True,
+                disabled=['ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi'],
+                key="return_editor_manual"
+            )
+            c1, c2 = st.columns(2)
+            with c1:
+                ly_do = st.selectbox("📌 Lý do hoàn trả", ["Thiết bị hỏng/Lỗi", "Không phù hợp nhu cầu", "Thừa vật tư", "Bảo hành định kỳ"], key="ld_1")
+            with c2:
+                kho_den = st.selectbox("🚚 Chuyển về kho", CO_SO, key="kd_1")
 
+            if st.button("🚀 Gửi yêu cầu (Chọn tay)"):
+                selected_ids = edited_return[edited_return["Chọn"] == True]["ID_He_Thong"].tolist()
+                if selected_ids:
+                    idx = st.session_state.inventory[st.session_state.inventory['ID_He_Thong'].isin(selected_ids)].index
+                    st.session_state.inventory.loc[idx, 'Vị_Trí_Kho'] = f"ĐANG CHUYỂN: {kho_den}"
+                    st.session_state.inventory.loc[idx, 'Chi_Tiết_Vị_Trí'] = f"Lý do: {ly_do} (Từ: {st.session_state.user_name})"
+                    save_all()
+                    st.success(f"Đã gửi {len(selected_ids)} thiết bị!")
+                    st.rerun()
+                else:
+                    st.warning("Chưa chọn thiết bị nào!")
+        else:
+            st.info("Kho trống.")
+
+    # --- TAB 2: NẠP TỪ EXCEL (MỚI) ---
+    with t2:
+        st.write("Dùng khi cần trả hàng loạt thiết bị (Ví dụ: Thanh lý, thu hồi dự án lớn).")
+        
+        # Tạo nút tải file mẫu
+        mau_tra = pd.DataFrame(columns=['Mã_TB', 'Số_Seri', 'Lý_Do', 'Chuyển_Về_Kho'])
+        mau_tra.loc[0] = ["VSE11", "123456", "Hỏng màn hình", CO_SO[0]]
+        st.download_button("📥 Tải file mẫu Hoàn trả (.xlsx)", get_sample_excel(mau_tra), "Mau_Hoan_Tra.xlsx")
+        
+        f_tra = st.file_uploader("Upload Excel Hoàn trả", type=["xlsx"])
+        
+        if f_tra and st.button("🚀 Xử lý file Excel"):
+            df_upload = pd.read_excel(f_tra)
+            # Chuẩn hóa tên cột
+            df_upload.columns = [c.strip() for c in df_upload.columns]
+            
+            count_ok = 0
+            list_errors = []
+            
+            for index, row in df_upload.iterrows():
+                # Tìm thiết bị trong kho của User khớp Model và Seri
+                mask = (
+                    (st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) & 
+                    (st.session_state.inventory['Mã_TB'] == str(row['Mã_TB'])) & 
+                    (st.session_state.inventory['Số_Seri'] == str(row['Số_Seri']))
+                )
+                
+                found_idx = st.session_state.inventory[mask].index
+                
+                if not found_idx.empty:
+                    # Lấy cái đầu tiên tìm thấy
+                    i = found_idx[0]
+                    st.session_state.inventory.loc[i, 'Vị_Trí_Kho'] = f"ĐANG CHUYỂN: {row['Chuyển_Về_Kho']}"
+                    st.session_state.inventory.loc[i, 'Chi_Tiết_Vị_Trí'] = f"Excel: {row['Lý_Do']} (Từ: {st.session_state.user_name})"
+                    st.session_state.inventory.loc[i, 'Trạng_Thái_Luoi'] = "Đang vận chuyển"
+                    count_ok += 1
+                else:
+                    list_errors.append(f"Dòng {index+2}: Không tìm thấy {row['Mã_TB']} - Seri: {row['Số_Seri']} trong kho của bạn.")
+            
+            if count_ok > 0:
                 save_all()
-                st.success("🎉 Đã nhập kho thành công! Thiết bị đã quay lại kho Công ty.")
-                st.rerun()
-            else:
-                st.warning("Vui lòng tích chọn thiết bị đã nhận thực tế.")
-    else:
-        st.info("✅ Hiện không có yêu cầu hoàn trả nào đang chờ xử lý.")
+                st.success(f"✅ Đã gửi thành công {count_ok} thiết bị!")
+            
+            if list_errors:
+                with st.expander("⚠️ Các dòng bị lỗi (Không tìm thấy trong kho)", expanded=True):
+                    for e in list_errors:
+                        st.write(e)
+            
+            if count_ok > 0:
+                st.rerun() # Tải lại trang để cập nhật
+
+elif menu == "📂 Quản lý Văn bản":
+    st.header("Kho Lưu Trữ Văn Bản Phân Bổ / Điều Chuyển")
+    
+    # 1. Form Upload văn bản mới
+    with st.expander("➕ Thêm văn bản mới", expanded=False):
+        with st.form("upload_doc"):
+            c1, c2 = st.columns(2)
+            loai_vb = c1.selectbox("Loại văn bản", ["Quyết định Phân bổ", "Lệnh Điều chuyển", "Biên bản Thu hồi/Bảo hành", "Khác"])
+            so_hieu = c2.text_input("Số hiệu văn bản (Số QĐ)")
+            ngay_ky = c1.date_input("Ngày ký").strftime("%d/%m/%Y")
+            mo_ta = c2.text_input("Trích yếu / Nội dung")
+            file_upload = st.file_uploader("Chọn file đính kèm (PDF, Docx)", type=['pdf', 'docx', 'xlsx', 'jpg'])
+            
+            if st.form_submit_button("Lưu trữ văn bản"):
+                if file_upload is None:
+                    st.error("Vui lòng đính kèm file văn bản gốc!")
+                else:
+                    engine = get_engine()
+                    # Đọc file thành dạng nhị phân (binary)
+                    file_bytes = file_upload.getvalue()
+                    
+                    doc_data = pd.DataFrame([{
+                        'id': str(uuid.uuid4()),
+                        'loai_vb': loai_vb,
+                        'so_hieu': so_hieu,
+                        'ngay_ky': ngay_ky,
+                        'mo_ta': mo_ta,
+                        'file_data': file_bytes, # Lưu nhị phân
+                        'file_name': file_upload.name,
+                        'nguoi_upload': st.session_state.user_name,
+                        'thoi_gian_up': datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+                    }])
+                    
+                    # Lưu vào bảng documents
+                    with engine.begin() as conn:
+                        doc_data.to_sql('documents', conn, if_exists='append', index=False)
+                    st.success("Đã lưu trữ văn bản thành công!")
+                    st.rerun()
+
+    # 2. Danh sách văn bản đã lưu
+    st.subheader("🗃 Danh sách văn bản")
+    engine = get_engine()
+    try:
+        # Chỉ lấy thông tin, KHÔNG lấy cột file_data để tránh lag
+        df_docs = pd.read_sql("SELECT id, loai_vb, so_hieu, ngay_ky, mo_ta, file_name, nguoi_upload, thoi_gian_up FROM documents ORDER BY thoi_gian_up DESC", engine)
+        
+        if not df_docs.empty:
+            for i, row in df_docs.iterrows():
+                with st.container(border=True):
+                    c1, c2, c3, c4 = st.columns([2, 2, 3, 1])
+                    c1.write(f"**{row['so_hieu']}**")
+                    c1.caption(row['ngay_ky'])
+                    c2.info(row['loai_vb'])
+                    c3.write(row['mo_ta'])
+                    c3.caption(f"Up bởi: {row['nguoi_upload']}")
+                    
+                    # Nút tải về
+                    with c4:
+                        # Truy vấn lại DB để lấy file_data của đúng dòng này khi bấm nút
+                        if st.button("📥 Tải", key=f"dl_{row['id']}"):
+                            file_query = pd.read_sql(f"SELECT file_data, file_name FROM documents WHERE id='{row['id']}'", engine)
+                            if not file_query.empty:
+                                file_content = file_query.iloc[0]['file_data']
+                                file_n = file_query.iloc[0]['file_name']
+                                st.download_button(
+                                    label="Bấm để lưu",
+                                    data=file_content,
+                                    file_name=file_n,
+                                    mime='application/octet-stream',
+                                    key=f"btn_dl_{row['id']}"
+                                )
+        else:
+            st.info("Chưa có văn bản nào được lưu.")
+    except Exception as e:
+        st.error(f"Chưa tạo bảng documents hoặc lỗi kết nối: {e}")
+
 
 
 
