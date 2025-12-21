@@ -418,70 +418,14 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
-elif menu == "📦 Hoàn Trả/Bảo Hành":
-    st.header(f"📦 Yêu cầu Hoàn trả / Bảo hành: {st.session_state.user_name}")
-    
-    # Lấy danh sách vật tư hiện đang ở Đội
-    df_dv = st.session_state.inventory[st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name].copy()
-    
-    if not df_dv.empty:
-        st.info("💡 Chọn các thiết bị cần trả lại hoặc gửi đi bảo hành.")
-        
-        # Thêm cột "Chọn" để người dùng tích vào
-        df_dv.insert(0, "Chọn", False)
-        
-        # Cấu hình bảng hiển thị (QUAN TRỌNG: Phải có Mã_TB để không bị mất cột Model)
-        cols_show = ['Chọn', 'ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi']
-        
-        edited_return = st.data_editor(
-            df_dv[cols_show],
-            column_config={
-                "Chọn": st.column_config.CheckboxColumn("Trả về?", default=False),
-                "Mã_TB": st.column_config.TextColumn("Model/Mã TB"), # Đảm bảo hiện cột Model
-            },
-            use_container_width=True,
-            disabled=['ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi'],
-            key="return_editor"
-        )
-        
-        st.write("---")
-        c1, c2 = st.columns(2)
-        with c1:
-            ly_do = st.selectbox("📌 Lý do hoàn trả", 
-                                ["Thiết bị hỏng/Lỗi", "Không phù hợp nhu cầu", "Thừa vật tư", "Bảo hành định kỳ", "Thu hồi về kho"])
-        with c2:
-            kho_den = st.selectbox("🚚 Chuyển về kho", CO_SO) # Danh sách kho (Cơ sở 1, 2...)
-
-        # Nút xác nhận gửi
-        if st.button("🚀 Gửi yêu cầu chuyển trả", type="primary"):
-            # Lấy danh sách ID các dòng được chọn
-            selected_ids = edited_return[edited_return["Chọn"] == True]["ID_He_Thong"].tolist()
-            
-            if not selected_ids:
-                st.warning("⚠️ Vui lòng chọn ít nhất 1 vật tư để trả!")
-            else:
-                # Cập nhật trạng thái trong Database
-                # Logic: Đổi vị trí kho thành "ĐANG CHUYỂN..." để Admin nhận biết
-                idx = st.session_state.inventory[st.session_state.inventory['ID_He_Thong'].isin(selected_ids)].index
-                
-                st.session_state.inventory.loc[idx, 'Vị_Trí_Kho'] = f"ĐANG CHUYỂN: {kho_den}"
-                st.session_state.inventory.loc[idx, 'Chi_Tiết_Vị_Trí'] = f"Lý do: {ly_do} (Từ: {st.session_state.user_name})"
-                st.session_state.inventory.loc[idx, 'Trạng_Thái_Luoi'] = "Đang vận chuyển"
-                
-                save_all() # Lưu ngay lập tức để tránh mất dữ liệu
-                st.success(f"✅ Đã gửi {len(selected_ids)} thiết bị về {kho_den}!")
-                st.rerun()
-    else:
-        st.success("Kho của đơn vị hiện đang trống, không có gì để trả.")
-
-# --- CHỨC NĂNG DÀNH CHO ADMIN: NHẬN HÀNG TRẢ VỀ ---
+# --- ĐỘI: GỬI YÊU CẦU TRẢ (Bổ sung ghi nhật ký) ---
 elif menu == "📦 Hoàn Trả/Bảo Hành":
     st.header(f"📦 Yêu cầu Hoàn trả / Bảo hành: {st.session_state.user_name}")
     
     # Chia tab
     t1, t2 = st.tabs(["✍️ Chọn từ danh sách", "📁 Nạp từ Excel"])
     
-    # --- TAB 1: CHỌN TAY (Code cũ đã sửa lại chút cho gọn) ---
+    # --- TAB 1: CHỌN TAY ---
     with t1:
         df_dv = st.session_state.inventory[st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name].copy()
         if not df_dv.empty:
@@ -499,7 +443,7 @@ elif menu == "📦 Hoàn Trả/Bảo Hành":
             )
             c1, c2 = st.columns(2)
             with c1:
-                ly_do = st.selectbox("📌 Lý do hoàn trả", ["Thiết bị hỏng/Lỗi", "Không phù hợp nhu cầu", "Thừa vật tư", "Bảo hành định kỳ"], key="ld_1")
+                ly_do = st.selectbox("📌 Lý do hoàn trả", ["Thiết bị hỏng/Lỗi", "Không phù hợp nhu cầu", "Thừa vật tư", "Bảo hành định kỳ", "Thu hồi về kho"], key="ld_1")
             with c2:
                 kho_den = st.selectbox("🚚 Chuyển về kho", CO_SO, key="kd_1")
 
@@ -509,6 +453,11 @@ elif menu == "📦 Hoàn Trả/Bảo Hành":
                     idx = st.session_state.inventory[st.session_state.inventory['ID_He_Thong'].isin(selected_ids)].index
                     st.session_state.inventory.loc[idx, 'Vị_Trí_Kho'] = f"ĐANG CHUYỂN: {kho_den}"
                     st.session_state.inventory.loc[idx, 'Chi_Tiết_Vị_Trí'] = f"Lý do: {ly_do} (Từ: {st.session_state.user_name})"
+                    
+                    # --- BỔ SUNG GHI NHẬT KÝ CHO ĐỘI ---
+                    sl = len(selected_ids)
+                    luu_nhat_ky("Hoàn trả/Bảo hành", f"Đội {st.session_state.user_name} gửi trả {sl} thiết bị về {kho_den}. Lý do: {ly_do}")
+                    
                     save_all()
                     st.success(f"Đã gửi {len(selected_ids)} thiết bị!")
                     st.rerun()
@@ -516,6 +465,111 @@ elif menu == "📦 Hoàn Trả/Bảo Hành":
                     st.warning("Chưa chọn thiết bị nào!")
         else:
             st.info("Kho trống.")
+
+    # --- TAB 2: NẠP TỪ EXCEL ---
+    with t2:
+        st.write("Dùng khi cần trả hàng loạt thiết bị.")
+        # ... (Phần nút tải mẫu giữ nguyên, chỉ sửa phần xử lý bên dưới) ...
+        f_tra = st.file_uploader("Upload Excel Hoàn trả", type=["xlsx"])
+        
+        if f_tra and st.button("🚀 Xử lý file Excel"):
+            try:
+                df_upload = pd.read_excel(f_tra)
+                df_upload.columns = [c.strip() for c in df_upload.columns]
+                
+                required_cols = ['Mã_TB', 'Số_Seri', 'Chuyển_Về_Kho']
+                if not all(col in df_upload.columns for col in required_cols):
+                    st.error(f"File thiếu cột: {required_cols}")
+                else:
+                    count_ok = 0
+                    for index, row in df_upload.iterrows():
+                        mask = (
+                            (st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) & 
+                            (st.session_state.inventory['Mã_TB'] == str(row['Mã_TB'])) & 
+                            (st.session_state.inventory['Số_Seri'] == str(row['Số_Seri']))
+                        )
+                        found_idx = st.session_state.inventory[mask].index
+                        if not found_idx.empty:
+                            i = found_idx[0]
+                            st.session_state.inventory.loc[i, 'Vị_Trí_Kho'] = f"ĐANG CHUYỂN: {row['Chuyển_Về_Kho']}"
+                            st.session_state.inventory.loc[i, 'Chi_Tiết_Vị_Trí'] = f"Excel: {row.get('Lý_Do', 'Excel Import')} (Từ: {st.session_state.user_name})"
+                            count_ok += 1
+                    
+                    if count_ok > 0:
+                        # --- BỔ SUNG GHI NHẬT KÝ CHO ĐỘI (EXCEL) ---
+                        luu_nhat_ky("Hoàn trả (Excel)", f"Đội {st.session_state.user_name} gửi trả {count_ok} thiết bị qua Excel.")
+                        
+                        save_all()
+                        st.success(f"✅ Đã gửi thành công {count_ok} thiết bị!")
+                        st.rerun()
+                    else:
+                        st.warning("Không tìm thấy thiết bị nào khớp trong kho của bạn.")
+            except Exception as e:
+                st.error(f"Lỗi: {e}")
+# --- CHỨC NĂNG DÀNH CHO ADMIN: NHẬN HÀNG TRẢ VỀ ---
+# --- ADMIN: CHỈ XỬ LÝ DUYỆT NHẬP KHO (Sửa lỗi màn hình trắng) ---
+elif menu == "🔄 Kho Bảo Hành/Hoàn Trả":
+    st.header("🔄 Duyệt Nhập Kho (Hoàn trả / Bảo hành)")
+    
+    # Lọc các vật tư có trạng thái kho là "ĐANG CHUYỂN"
+    mask_pending = st.session_state.inventory['Vị_Trí_Kho'].str.contains("ĐANG CHUYỂN", na=False)
+    df_return = st.session_state.inventory[mask_pending].copy()
+    
+    if not df_return.empty:
+        st.info(f"🔔 Hiện có {len(df_return)} thiết bị các Đội đang gửi trả về.")
+        
+        # Thêm cột xác nhận
+        df_return.insert(0, "Xác nhận", False)
+        
+        # Cấu hình bảng hiển thị
+        cols_admin = ['Xác nhận', 'ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Vị_Trí_Kho', 'Chi_Tiết_Vị_Trí']
+        edited_admin = st.data_editor(
+            df_return[cols_admin],
+            column_config={
+                "Xác nhận": st.column_config.CheckboxColumn("Đã nhận hàng?", default=False),
+                "Vị_Trí_Kho": st.column_config.TextColumn("Trạng thái"),
+                "Chi_Tiết_Vị_Trí": st.column_config.TextColumn("Lý do & Nguồn gốc", width="medium"),
+            },
+            use_container_width=True,
+            disabled=[c for c in cols_admin if c != "Xác nhận"],
+            key="admin_return_only"
+        )
+        
+        # Nút xử lý
+        if st.button("✅ Xác nhận Nhập kho"):
+            to_confirm = edited_admin[edited_admin["Xác nhận"] == True]
+            
+            if not to_confirm.empty:
+                for _, row in to_confirm.iterrows():
+                    target_id = row['ID_He_Thong']
+                    current_status = row['Vị_Trí_Kho'] 
+                    
+                    # Lấy tên kho đích thực sự
+                    real_warehouse = current_status.split(": ")[-1] if ": " in current_status else CO_SO[0]
+                    
+                    # Cập nhật Inventory
+                    idx = st.session_state.inventory[st.session_state.inventory['ID_He_Thong'] == target_id].index
+                    st.session_state.inventory.loc[idx, 'Vị_Trí_Kho'] = real_warehouse
+                    
+                    # Cập nhật trạng thái
+                    note = str(row['Chi_Tiết_Vị_Trí']).lower()
+                    if "hỏng" in note or "lỗi" in note or "bảo hành" in note:
+                        st.session_state.inventory.loc[idx, 'Trạng_Thái_Luoi'] = "Chờ bảo hành/Sửa chữa"
+                        st.session_state.inventory.loc[idx, 'Mục_Đích'] = "Hàng lỗi chờ xử lý"
+                    else:
+                        st.session_state.inventory.loc[idx, 'Trạng_Thái_Luoi'] = "Dưới kho"
+                        st.session_state.inventory.loc[idx, 'Mục_Đích'] = "Thu hồi về kho"
+
+                    # Ghi nhật ký (ADMIN XÁC NHẬN)
+                    luu_nhat_ky("Nhập kho Hoàn trả", f"Đã nhận {row['Mã_TB']} ({row['Số_Seri']}) về {real_warehouse}. Note: {note}")
+
+                save_all()
+                st.success(f"🎉 Đã nhập kho thành công {len(to_confirm)} thiết bị!")
+                st.rerun()
+            else:
+                st.warning("Vui lòng tích chọn thiết bị cần nhập.")
+    else:
+        st.success("✅ Không có yêu cầu hoàn trả nào đang chờ.")
 
     # --- TAB 2: NẠP TỪ EXCEL (MỚI) ---
     with t2:
@@ -644,6 +698,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
