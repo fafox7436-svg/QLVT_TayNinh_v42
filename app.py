@@ -144,16 +144,13 @@ if not st.session_state.logged_in:
                 st.error("Mật khẩu sai!")
     st.stop()
 
-# --- 6. SIDEBAR ---
-st.sidebar.write(f"👤 Đang dùng: **{st.session_state.user_name}**")
-if st.sidebar.button("Đăng xuất"):
-    st.session_state.logged_in = False
-    st.rerun()
-
+# --- 6. SIDEBAR --- (Sửa lại đoạn này)
 if st.session_state.user_role == "admin":
-    menu = st.sidebar.radio("CÔNG TY", ["📊 Giám sát & Dashboard", "📥 Nhập Kho", "🚚 Cấp Phát", "🚨 Duyệt Báo Hỏng"])
+    # Thêm mục "🔄 Kho Bảo Hành/Hoàn Trả"
+    menu = st.sidebar.radio("CÔNG TY", ["📊 Giám sát & Dashboard", "📥 Nhập Kho", "🚚 Cấp Phát", "🚨 Duyệt Báo Hỏng", "🔄 Kho Bảo Hành/Hoàn Trả"])
 else:
-    menu = st.sidebar.radio("ĐỘI QLĐ", ["🛠️ Hiện trường (Seri)", "🚨 Báo Hỏng"])
+    # Thêm mục "📦 Hoàn Trả/Bảo Hành"
+    menu = st.sidebar.radio("ĐỘI QLĐ", ["🛠️ Hiện trường (Seri)", "🚨 Báo Hỏng", "📦 Hoàn Trả/Bảo Hành"])
 
 # --- 7. CHI TIẾT CHỨC NĂNG ---
 
@@ -325,6 +322,124 @@ elif menu == "🚨 Báo Hỏng":
             df_bh['Trạng_Thái'] = 'Chờ xử lý'
             df_bh['Thời_Gian_Bù'] = '---'
             confirm_dialog("bao_hong", df_bh)
+elif menu == "📦 Hoàn Trả/Bảo Hành":
+    st.header(f"📦 Yêu cầu Hoàn trả / Bảo hành: {st.session_state.user_name}")
+    
+    # Lấy danh sách vật tư hiện đang ở Đội
+    df_dv = st.session_state.inventory[st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name].copy()
+    
+    if not df_dv.empty:
+        st.info("💡 Chọn các thiết bị cần trả lại hoặc gửi đi bảo hành.")
+        
+        # Thêm cột "Chọn" để người dùng tích vào
+        df_dv.insert(0, "Chọn", False)
+        
+        # Cấu hình bảng hiển thị (QUAN TRỌNG: Phải có Mã_TB để không bị mất cột Model)
+        cols_show = ['Chọn', 'ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi']
+        
+        edited_return = st.data_editor(
+            df_dv[cols_show],
+            column_config={
+                "Chọn": st.column_config.CheckboxColumn("Trả về?", default=False),
+                "Mã_TB": st.column_config.TextColumn("Model/Mã TB"), # Đảm bảo hiện cột Model
+            },
+            use_container_width=True,
+            disabled=['ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi'],
+            key="return_editor"
+        )
+        
+        st.write("---")
+        c1, c2 = st.columns(2)
+        with c1:
+            ly_do = st.selectbox("📌 Lý do hoàn trả", 
+                                ["Thiết bị hỏng/Lỗi", "Không phù hợp nhu cầu", "Thừa vật tư", "Bảo hành định kỳ", "Thu hồi về kho"])
+        with c2:
+            kho_den = st.selectbox("🚚 Chuyển về kho", CO_SO) # Danh sách kho (Cơ sở 1, 2...)
+
+        # Nút xác nhận gửi
+        if st.button("🚀 Gửi yêu cầu chuyển trả", type="primary"):
+            # Lấy danh sách ID các dòng được chọn
+            selected_ids = edited_return[edited_return["Chọn"] == True]["ID_He_Thong"].tolist()
+            
+            if not selected_ids:
+                st.warning("⚠️ Vui lòng chọn ít nhất 1 vật tư để trả!")
+            else:
+                # Cập nhật trạng thái trong Database
+                # Logic: Đổi vị trí kho thành "ĐANG CHUYỂN..." để Admin nhận biết
+                idx = st.session_state.inventory[st.session_state.inventory['ID_He_Thong'].isin(selected_ids)].index
+                
+                st.session_state.inventory.loc[idx, 'Vị_Trí_Kho'] = f"ĐANG CHUYỂN: {kho_den}"
+                st.session_state.inventory.loc[idx, 'Chi_Tiết_Vị_Trí'] = f"Lý do: {ly_do} (Từ: {st.session_state.user_name})"
+                st.session_state.inventory.loc[idx, 'Trạng_Thái_Luoi'] = "Đang vận chuyển"
+                
+                save_all() # Lưu ngay lập tức để tránh mất dữ liệu
+                st.success(f"✅ Đã gửi {len(selected_ids)} thiết bị về {kho_den}!")
+                st.rerun()
+    else:
+        st.success("Kho của đơn vị hiện đang trống, không có gì để trả.")
+
+
+# --- CHỨC NĂNG DÀNH CHO ADMIN: NHẬN HÀNG TRẢ VỀ ---
+elif menu == "🔄 Kho Bảo Hành/Hoàn Trả":
+    st.header("🔄 Quản lý Nhập kho Hoàn trả/Bảo hành")
+    
+    # Lọc ra các vật tư đang ở trạng thái "ĐANG CHUYỂN"
+    # Nghĩa là Đội đã bấm gửi, nhưng Kho chưa bấm nhận
+    mask_pending = st.session_state.inventory['Vị_Trí_Kho'].str.contains("ĐANG CHUYỂN", na=False)
+    df_return = st.session_state.inventory[mask_pending].copy()
+    
+    if not df_return.empty:
+        st.warning(f"🔔 Có {len(df_return)} thiết bị đang được chuyển về kho.")
+        
+        df_return.insert(0, "Xác nhận", False)
+        
+        # Hiển thị bảng duyệt
+        cols_admin = ['Xác nhận', 'ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Vị_Trí_Kho', 'Chi_Tiết_Vị_Trí']
+        
+        edited_admin = st.data_editor(
+            df_return[cols_admin],
+            column_config={
+                "Xác nhận": st.column_config.CheckboxColumn("Đã nhận hàng?", default=False),
+                "Vị_Trí_Kho": st.column_config.TextColumn("Trạng thái chuyển"),
+                "Chi_Tiết_Vị_Trí": st.column_config.TextColumn("Lý do & Nguồn gốc", width="medium"),
+            },
+            use_container_width=True,
+            disabled=[c for c in cols_admin if c != "Xác nhận"],
+            key="admin_return_editor"
+        )
+        
+        if st.button("✅ Xác nhận Nhập kho"):
+            to_confirm = edited_admin[edited_admin["Xác nhận"] == True]
+            
+            if not to_confirm.empty:
+                for _, row in to_confirm.iterrows():
+                    target_id = row['ID_He_Thong']
+                    current_status_str = row['Vị_Trí_Kho'] # Ví dụ: "ĐANG CHUYỂN: PC Tây Ninh - Cơ sở 1"
+                    
+                    # Tách chuỗi để lấy tên kho đích thực sự
+                    real_warehouse = current_status_str.split(": ")[-1] if ": " in current_status_str else CO_SO[0]
+                    
+                    # Cập nhật vào kho chính thức
+                    idx = st.session_state.inventory[st.session_state.inventory['ID_He_Thong'] == target_id].index
+                    st.session_state.inventory.loc[idx, 'Vị_Trí_Kho'] = real_warehouse
+                    
+                    # Nếu lý do là Hỏng -> Trạng thái: Chờ bảo hành
+                    # Nếu lý do là Thừa -> Trạng thái: Dưới kho
+                    note = str(row['Chi_Tiết_Vị_Trí'])
+                    if "hỏng" in note.lower() or "lỗi" in note.lower() or "bảo hành" in note.lower():
+                        st.session_state.inventory.loc[idx, 'Trạng_Thái_Luoi'] = "Chờ bảo hành/Sửa chữa"
+                        st.session_state.inventory.loc[idx, 'Mục_Đích'] = "Hàng lỗi chờ xử lý"
+                    else:
+                        st.session_state.inventory.loc[idx, 'Trạng_Thái_Luoi'] = "Dưới kho"
+                        st.session_state.inventory.loc[idx, 'Mục_Đích'] = "Thu hồi về kho"
+
+                save_all()
+                st.success("🎉 Đã nhập kho thành công! Thiết bị đã quay lại kho Công ty.")
+                st.rerun()
+            else:
+                st.warning("Vui lòng tích chọn thiết bị đã nhận thực tế.")
+    else:
+        st.info("✅ Hiện không có yêu cầu hoàn trả nào đang chờ xử lý.")
 
 
 
