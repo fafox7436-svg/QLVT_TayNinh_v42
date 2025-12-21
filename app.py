@@ -144,14 +144,20 @@ if not st.session_state.logged_in:
                 st.error("Mật khẩu sai!")
     st.stop()
 
-# --- 6. SIDEBAR --- (Sửa lại đoạn này)
+# --- 6. SIDEBAR ---
+# 1. Hiển thị thông tin người dùng và nút Đăng xuất (Phần bị mất)
+st.sidebar.write(f"👤 Đang dùng: **{st.session_state.user_name}**")
+if st.sidebar.button("Đăng xuất"):
+    st.session_state.logged_in = False
+    st.rerun()
+
+st.sidebar.markdown("---") # Đường kẻ ngang phân cách cho đẹp
+
+# 2. Menu chức năng (Đã cập nhật thêm mục Hoàn trả)
 if st.session_state.user_role == "admin":
-    # Thêm mục "🔄 Kho Bảo Hành/Hoàn Trả"
     menu = st.sidebar.radio("CÔNG TY", ["📊 Giám sát & Dashboard", "📥 Nhập Kho", "🚚 Cấp Phát", "🚨 Duyệt Báo Hỏng", "🔄 Kho Bảo Hành/Hoàn Trả"])
 else:
-    # Thêm mục "📦 Hoàn Trả/Bảo Hành"
     menu = st.sidebar.radio("ĐỘI QLĐ", ["🛠️ Hiện trường (Seri)", "🚨 Báo Hỏng", "📦 Hoàn Trả/Bảo Hành"])
-
 # --- 7. CHI TIẾT CHỨC NĂNG ---
 
 if menu == "📊 Giám sát & Dashboard":
@@ -439,6 +445,7 @@ elif menu == "🔄 Kho Bảo Hành/Hoàn Trả":
                 st.warning("Vui lòng tích chọn thiết bị đã nhận thực tế.")
     else:
         st.info("✅ Hiện không có yêu cầu hoàn trả nào đang chờ xử lý.")
+
 
 
 
