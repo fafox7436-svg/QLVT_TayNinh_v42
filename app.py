@@ -507,7 +507,7 @@ elif menu == "📦 Hoàn Trả/Bảo Hành":
             except Exception as e:
                 st.error(f"Lỗi: {e}")
 # --- CHỨC NĂNG DÀNH CHO ADMIN: NHẬN HÀNG TRẢ VỀ ---
-# --- ADMIN: CHỈ XỬ LÝ DUYỆT NHẬP KHO (Sửa lỗi màn hình trắng) ---
+# --- 1. MENU DUYỆT NHẬP KHO (Dành cho Admin duyệt hàng Đội trả về) ---
 elif menu == "🔄 Kho Bảo Hành/Hoàn Trả":
     st.header("🔄 Duyệt Nhập Kho (Hoàn trả / Bảo hành)")
     
@@ -560,7 +560,7 @@ elif menu == "🔄 Kho Bảo Hành/Hoàn Trả":
                         st.session_state.inventory.loc[idx, 'Trạng_Thái_Luoi'] = "Dưới kho"
                         st.session_state.inventory.loc[idx, 'Mục_Đích'] = "Thu hồi về kho"
 
-                    # Ghi nhật ký (ADMIN XÁC NHẬN)
+                    # Ghi nhật ký
                     luu_nhat_ky("Nhập kho Hoàn trả", f"Đã nhận {row['Mã_TB']} ({row['Số_Seri']}) về {real_warehouse}. Note: {note}")
 
                 save_all()
@@ -571,29 +571,48 @@ elif menu == "🔄 Kho Bảo Hành/Hoàn Trả":
     else:
         st.success("✅ Không có yêu cầu hoàn trả nào đang chờ.")
 
-    # --- TAB 2: NẠP TỪ EXCEL (MỚI) ---
-    with t2:
-        st.write("Dùng khi cần trả hàng loạt thiết bị.")
-        # ... (Phần nút tải mẫu giữ nguyên) ...
+# --- 2. MENU NHẬT KÝ HỆ THỐNG (Xem lịch sử truy vết) ---
+elif menu == "📜 Nhật ký Hệ thống":
+    st.header("📜 Tra cứu Nhật ký & Lịch sử Điều chuyển")
+    
+    # Bộ lọc
+    c1, c2 = st.columns(2)
+    ngay_xem = c1.date_input("Xem từ ngày", datetime.date.today())
+    loai_hd = c2.selectbox("Lọc theo hành động", ["Tất cả", "Nhập kho Hoàn trả", "Điều chuyển/Cấp phát", "Báo hỏng", "Xóa dữ liệu"])
+    
+    st.write("---")
+    
+    engine = get_engine()
+    try:
+        sql_query = "SELECT * FROM nhat_ky_he_thong ORDER BY id DESC LIMIT 500"
+        df_log = pd.read_sql(sql_query, engine)
         
-        f_tra = st.file_uploader("Upload Excel Hoàn trả", type=["xlsx"])
-        
-        if f_tra and st.button("🚀 Xử lý file Excel"):
-            try:
-                df_upload = pd.read_excel(f_tra)
-                # Chuẩn hóa tên cột: Xóa khoảng trắng thừa
-                df_upload.columns = [c.strip() for c in df_upload.columns]
-                
-                # Kiểm tra xem file Excel có đủ cột bắt buộc không
-                required_cols = ['Mã_TB', 'Số_Seri', 'Chuyển_Về_Kho']
-                if not all(col in df_upload.columns for col in required_cols):
-                    st.error(f"File Excel thiếu cột! Bắt buộc phải có: {required_cols}")
-                else:
-                    # ... (Đoạn code xử lý vòng lặp for giữ nguyên) ...
-                    # Chỉ cần đảm bảo đoạn logic bên trong giống code cũ
-                    pass 
-            except Exception as e:
-                st.error(f"Lỗi đọc file Excel: {e}")
+        if not df_log.empty:
+            if loai_hd != "Tất cả":
+                df_log = df_log[df_log['hanh_dong'].str.contains(loai_hd, case=False, na=False)]
+            
+            st.dataframe(
+                df_log, 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "thoi_gian": "Thời gian",
+                    "nguoi_thuc_hien": "Người thực hiện",
+                    "hanh_dong": "Hành động",
+                    "noi_dung_chi_tiet": "Chi tiết nội dung"
+                }
+            )
+            
+            st.download_button(
+                "📥 Tải Nhật ký về Excel",
+                get_sample_excel(df_log),
+                f"Nhat_Ky_{ngay_xem}.xlsx"
+            )
+        else:
+            st.info("Chưa có dữ liệu nhật ký nào.")
+            
+    except Exception as e:
+        st.error(f"Lỗi kết nối bảng nhật ký: {e}")
 
 elif menu == "📂 Quản lý Văn bản":
     st.header("Kho Lưu Trữ Văn Bản Phân Bổ / Điều Chuyển")
@@ -698,6 +717,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
