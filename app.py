@@ -1015,63 +1015,78 @@ elif menu == "📜 Nhật ký Hệ thống":
     except Exception as e:
         st.error(f"Lỗi kết nối bảng nhật ký: {e}")
 
-# --- MENU QUẢN LÝ VĂN BẢN (FULL: ĐỌC PDF + FIX LỖI KEY + GIỜ VN) ---
+# --- MENU QUẢN LÝ VĂN BẢN (CHẾ ĐỘ DÒ LỖI DEBUG) ---
 elif menu == "📂 Quản lý Văn bản":
     st.header("📂 Kho Văn Bản & Phân Bổ")
 
-    # 1. HÀM ĐỌC PDF (LOGIC TRÍCH XUẤT NẰM Ở ĐÂY)
+    # 1. HÀM ĐỌC PDF (CÓ HIỂN THỊ LỖI CHI TIẾT)
     def trich_xuat_thong_tin_pdf(uploaded_file):
         try:
+            # Reset con trỏ file về đầu để đảm bảo đọc được
+            uploaded_file.seek(0)
+            
             reader = PdfReader(uploaded_file)
             text = ""
-            if len(reader.pages) > 0:
-                text = reader.pages[0].extract_text()
             
+            # Đọc toàn bộ các trang (đề phòng thông tin nằm trang 2)
+            for page in reader.pages:
+                text += page.extract_text() + "\n"
+            
+            # --- DEBUG: IN RA MÀN HÌNH ĐỂ XEM MÁY ĐỌC ĐƯỢC GÌ ---
+            with st.expander("🔍 Bấm vào đây để xem nội dung máy đọc được (Debug)", expanded=True):
+                st.text(text) # In nguyên văn text ra
+                if not text.strip():
+                    st.error("⚠️ Cảnh báo: Máy không đọc được chữ nào! Có thể đây là file PDF dạng ảnh (Scan) hoặc bị mã hóa.")
+            # -----------------------------------------------------
+
             info = {"so": "", "ngay": None, "noi_dung": ""}
             
-            # Tìm Số văn bản
-            match_so = re.search(r"Số:[\s\n._-]*([\d]+/[A-Z0-9\-]+)", text, re.IGNORECASE)
+            # 1. Tìm Số văn bản
+            # Thử regex linh hoạt hơn (chấp nhận khoảng trắng rộng)
+            match_so = re.search(r"Số:[\s\W_]*([0-9]+/[A-Z0-9\-]+)", text, re.IGNORECASE)
             if match_so: info["so"] = match_so.group(1).strip()
             
-            # Tìm Ngày tháng
+            # 2. Tìm Ngày tháng
             match_ngay = re.search(r"ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})", text, re.IGNORECASE)
             if match_ngay:
                 d, m, y = map(int, match_ngay.groups())
                 info["ngay"] = datetime.date(y, m, d)
                 
-            # Tìm Nội dung
+            # 3. Tìm Nội dung
             match_nd = re.search(r"(V/v[\s\S]+?)(?=\n\s*(?:Kính gửi|Nơi nhận|Tây Ninh|CỘNG HÒA)|\n{3,})", text, re.IGNORECASE)
             if match_nd:
                 raw = match_nd.group(1)
                 info["noi_dung"] = re.sub(r'\s+', ' ', raw).strip()
                 
             return info
-        except:
+        except Exception as e:
+            st.error(f"❌ Lỗi khi đọc file: {e}") # Hiện lỗi cụ thể nếu có
             return {"so": "", "ngay": None, "noi_dung": ""}
 
-    # 2. FORM UPLOAD & TỰ ĐỘNG ĐIỀN
+    # 2. FORM UPLOAD
     with st.expander("➕ Thêm văn bản mới", expanded=True):
         file_upload = st.file_uploader("Chọn file văn bản (PDF)", type=['pdf'])
         
-        # Biến mặc định
         auto_so = ""
         auto_ngay = datetime.date.today()
         auto_nd = ""
         
-        # --- KÍCH HOẠT TÍNH NĂNG ĐỌC PDF TẠI ĐÂY ---
-        if file_upload is not None and file_upload.name.endswith('.pdf'):
-            data_pdf = trich_xuat_thong_tin_pdf(file_upload)
-            
-            # Nếu đọc được thì điền vào biến
-            if data_pdf["so"]: auto_so = data_pdf["so"]
-            if data_pdf["ngay"]: auto_ngay = data_pdf["ngay"]
-            if data_pdf["noi_dung"]: auto_nd = data_pdf["noi_dung"]
-            
-            st.success("✅ Đã trích xuất nội dung từ file PDF!")
+        # Xử lý ngay khi upload
+        if file_upload is not None:
+            if file_upload.name.endswith('.pdf'):
+                data_pdf = trich_xuat_thong_tin_pdf(file_upload)
+                
+                if data_pdf["so"]: auto_so = data_pdf["so"]
+                if data_pdf["ngay"]: auto_ngay = data_pdf["ngay"]
+                if data_pdf["noi_dung"]: auto_nd = data_pdf["noi_dung"]
+                
+                if data_pdf["so"] or data_pdf["noi_dung"]:
+                    st.success("✅ Đã tìm thấy thông tin!")
+                else:
+                    st.warning("⚠️ Không tìm thấy Số hoặc Nội dung. Hãy kiểm tra phần 'Debug' ở trên xem text bị lỗi gì.")
 
         with st.form("upload_doc"):
             c1, c2 = st.columns([1, 2])
-            # Gán giá trị tự động vào value
             so_hieu = c1.text_input("Số văn bản", value=auto_so, placeholder="Vd: 5291/PCTN-KD")
             ngay_ky = c1.date_input("Ngày ký", value=auto_ngay)
             loai_vb = c1.selectbox("Loại văn bản", ["Quyết định Phân bổ", "Lệnh Điều chuyển", "Công văn", "Khác"])
@@ -1084,7 +1099,6 @@ elif menu == "📂 Quản lý Văn bản":
                     st.error("Thiếu file đính kèm!")
                 else:
                     engine = get_engine()
-                    # Reset con trỏ file về đầu trước khi đọc bytes để lưu
                     file_upload.seek(0)
                     file_bytes = file_upload.read()
                     ghi_chu_txt = ", ".join(doi_lien_quan) if doi_lien_quan else ""
@@ -1099,7 +1113,7 @@ elif menu == "📂 Quản lý Văn bản":
                         'file_data': file_bytes,
                         'file_name': file_upload.name,
                         'nguoi_upload': st.session_state.user_name,
-                        'thoi_gian_up': get_vn_time() # Dùng hàm giờ VN
+                        'thoi_gian_up': get_vn_time() 
                     }])
                     
                     with engine.begin() as conn:
@@ -1107,7 +1121,7 @@ elif menu == "📂 Quản lý Văn bản":
                     st.success("Lưu thành công!")
                     st.rerun()
 
-    # 3. DANH SÁCH VĂN BẢN (ĐÃ FIX LỖI KEY)
+    # 3. DANH SÁCH VĂN BẢN (GIỮ NGUYÊN)
     st.write("---")
     st.subheader("🗃 Danh sách văn bản")
     engine = get_engine()
@@ -1141,11 +1155,9 @@ elif menu == "📂 Quản lý Văn bản":
                             if not file_q.empty:
                                 raw_data = file_q.iloc[0]['file_data']
                                 if raw_data:
-                                    # Thêm _{i} vào key để không bị trùng
                                     st.download_button("📥", data=bytes(raw_data), file_name=row['file_name'], mime='application/pdf', key=f"dl_{row['id']}_{i}")
                         
                         with btn_del:
-                            # Thêm _{i} vào key để không bị trùng
                             if st.button("🗑️", key=f"del_{row['id']}_{i}", type="primary"):
                                 with engine.begin() as conn:
                                     conn.exec_driver_sql(f"DELETE FROM documents WHERE id = '{row['id']}'")
@@ -1184,6 +1196,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
