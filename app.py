@@ -354,17 +354,97 @@ elif menu == "🚚 Cấp Phát":
         if f_c and st.button("🚀 Nạp Excel Cấp"):
             confirm_dialog("cap_phat", pd.read_excel(f_c))
 
+# --- ADMIN: DUYỆT BÁO HỎNG & LỊCH SỬ BÙ HÀNG ---
 elif menu == "🚨 Duyệt Báo Hỏng":
-    st.header("Duyệt Bù Hàng Báo Hỏng")
-    req_df = st.session_state.requests.copy()
-    if not req_df.empty:
-        req_df.insert(0, "Duyệt", False)
-        edited = st.data_editor(req_df, use_container_width=True, disabled=[c for c in req_df.columns if c != "Duyệt"])
-        to_app = edited[edited["Duyệt"] == True].index.tolist()
-        if to_app and st.button("✅ Phê duyệt bù hàng"):
-            confirm_dialog("duyet_hong", to_app)
-    else:
-        st.info("Không có yêu cầu báo hỏng nào.")
+    st.header("🚨 Quản lý Duyệt Bù Hàng & Báo Hỏng")
+    
+    # Chia 2 Tab: Chờ xử lý và Lịch sử
+    t1, t2 = st.tabs(["⏳ Yêu cầu Chờ duyệt", "✅ Lịch sử Hàng Đã Bù"])
+    
+   # --- TAB 1: DUYỆT YÊU CẦU MỚI (ĐÃ SỬA LỖI KHÔNG MẤT DÒNG) ---
+    with t1:
+        # Lọc các yêu cầu chưa được xử lý
+        # Lưu ý: .copy() để không ảnh hưởng dữ liệu gốc khi hiển thị
+        req_pending = st.session_state.requests[st.session_state.requests['Trạng_Thái'] != "Đã bù hàng"].copy()
+        
+        if not req_pending.empty:
+            st.info(f"🔔 Có {len(req_pending)} yêu cầu báo hỏng đang chờ xử lý.")
+            
+            # Thêm cột Duyệt
+            req_pending.insert(0, "Duyệt", False)
+            
+            edited = st.data_editor(
+                req_pending, 
+                use_container_width=True, 
+                disabled=[c for c in req_pending.columns if c != "Duyệt"],
+                key="editor_duyet_hong"
+            )
+            
+            # Nút duyệt
+            if st.button("✅ Phê duyệt bù hàng ngay"):
+                # Lấy những dòng được tích chọn
+                to_app = edited[edited["Duyệt"] == True]
+                
+                if not to_app.empty:
+                    # Lấy danh sách Index (Vị trí dòng) của các yêu cầu được chọn
+                    # Vì req_pending giữ nguyên Index từ bảng gốc, nên ta dùng Index này để cập nhật ngược lại bảng gốc
+                    target_indices = to_app.index.tolist()
+                    
+                    now_str = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                    
+                    # Cập nhật trực tiếp vào Session State
+                    st.session_state.requests.loc[target_indices, 'Trạng_Thái'] = "Đã bù hàng"
+                    st.session_state.requests.loc[target_indices, 'Thời_Gian_Bù'] = now_str
+                    
+                    # Ghi nhật ký
+                    cnt = len(target_indices)
+                    luu_nhat_ky("Duyệt bảo hành", f"Admin đã duyệt bù hàng cho {cnt} thiết bị.")
+                    
+                    # 1. Lưu xuống Database
+                    save_all()
+                    
+                    # 2. QUAN TRỌNG: TẢI LẠI DỮ LIỆU TỪ SQL ĐỂ MÀN HÌNH CẬP NHẬT NGAY
+                    # Dòng này sẽ xóa bộ nhớ đệm cũ và lấy dữ liệu mới nhất (đã lọc bỏ hàng đã duyệt)
+                    st.session_state.inventory, st.session_state.requests = load_data()
+                    
+                    st.success(f"🎉 Đã duyệt xong {cnt} yêu cầu!")
+                    st.rerun()
+                else:
+                    st.warning("Vui lòng tích chọn yêu cầu cần duyệt.")
+        else:
+            st.success("✅ Tuyệt vời! Không có yêu cầu báo hỏng nào tồn đọng.")
+
+    # --- TAB 2: LỊCH SỬ ĐÃ BÙ (TÍNH NĂNG MỚI BẠN YÊU CẦU) ---
+    with t2:
+        st.write("🔍 **Danh sách các thiết bị đã được Admin duyệt cấp bù:**")
+        
+        # Lọc các yêu cầu ĐÃ BÙ
+        req_done = st.session_state.requests[st.session_state.requests['Trạng_Thái'] == "Đã bù hàng"].copy()
+        
+        if not req_done.empty:
+            # Sắp xếp mới nhất lên đầu
+            # (Giả sử cột ID hoặc index tăng dần theo thời gian)
+            req_done = req_done.sort_index(ascending=False)
+            
+            st.dataframe(
+                req_done,
+                use_container_width=True,
+                column_config={
+                    "Thời_Gian_Bù": st.column_config.TextColumn("Ngày được bù", help="Thời điểm Admin duyệt"),
+                    "Thời_Gian_Báo": "Ngày báo hỏng",
+                    "Đơn_Vị": "Đơn vị nhận",
+                    "Tên_Vật_Tư": "Thiết bị",
+                },
+                hide_index=True
+            )
+            
+            st.download_button(
+                "📥 Tải danh sách Đã bù (.xlsx)",
+                get_sample_excel(req_done),
+                f"Lich_Su_Bu_Hang_{datetime.date.today()}.xlsx"
+            )
+        else:
+            st.info("Chưa có dữ liệu lịch sử bù hàng.")
 
 # --- MENU HIỆN TRƯỜNG & THAY THẾ THU HỒI (NÂNG CẤP) ---
 elif menu == "🛠️ Hiện trường (Seri)":
@@ -626,33 +706,104 @@ elif menu == "🛠️ Hiện trường (Seri)":
         else:
             st.success("✅ Không có vật tư thu hồi nào tồn đọng.")
 
+# --- ĐỘI: BÁO HỎNG & THEO DÕI (CÓ THÊM BẢNG THEO DÕI) ---
 elif menu == "🚨 Báo Hỏng":
-    st.header("Báo Hỏng Thiết Bị")
-    t1, t2 = st.tabs(["✍️ Báo tay", "📁 Excel Báo hỏng"])
+    st.header("🚨 Báo Hỏng & Theo Dõi Bù Hàng")
+    
+    # Chia 3 Tab: Nhập tay, Excel và Theo dõi
+    t1, t2, t3 = st.tabs(["✍️ Báo hỏng (Mới)", "📁 Nạp Excel", "👀 Theo dõi Trạng thái"])
+    
+    # --- TAB 1: BÁO HỎNG THỦ CÔNG ---
     with t1:
         with st.form("f_h"):
-            lvt = st.selectbox("Loại", list(DANM_MUC_NCC.keys()))
-            tvt = st.text_input("Tên VT")
-            ncc = st.selectbox("Nhà CC", DANM_MUC_NCC[lvt])
-            cl = st.text_input("Model/Chủng loại")
-            sl = st.number_input("SL", min_value=1, step=1)
+            c1, c2 = st.columns(2)
+            lvt = c1.selectbox("Loại VT", list(DANM_MUC_NCC.keys()))
+            ncc = c2.selectbox("Nhà Cung Cấp", DANM_MUC_NCC[lvt])
+            
+            c3, c4 = st.columns(2)
+            tvt = c3.text_input("Tên Vật Tư (Vd: Công tơ xoay chiều...)")
+            cl = c4.text_input("Model/Chủng loại")
+            
+            sl = st.number_input("Số Lượng", min_value=1, step=1)
+            ly_do = st.text_area("Lý do hỏng/Mô tả tình trạng")
+            
             if st.form_submit_button("🚀 Gửi báo hỏng"):
                 now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                 new_h = pd.DataFrame([{
-                    'Thời_Gian_Báo': now, 'Đơn_Vị': st.session_state.user_name, 'Loại_VT': lvt, 
-                    'Tên_Vật_Tư': tvt, 'Nhà_CC': ncc, 'Chủng_Loại': cl, 'Số_Lượng': sl, 
-                    'Lý_Do': 'Hỏng hiện trường', 'Trạng_Thái': 'Chờ xử lý', 'Thời_Gian_Bù': '---'
+                    'Thời_Gian_Báo': now, 
+                    'Đơn_Vị': st.session_state.user_name, 
+                    'Loại_VT': lvt, 
+                    'Tên_Vật_Tư': tvt, 
+                    'Nhà_CC': ncc, 
+                    'Chủng_Loại': cl, 
+                    'Số_Lượng': sl, 
+                    'Lý_Do': ly_do if ly_do else 'Hỏng hiện trường', 
+                    'Trạng_Thái': 'Chờ xử lý', # Mặc định là chờ
+                    'Thời_Gian_Bù': '---'
                 }])
                 confirm_dialog("bao_hong", new_h)
+
+    # --- TAB 2: NẠP EXCEL ---
     with t2:
+        st.info("💡 Tải file mẫu, điền thông tin và nạp lại để báo hỏng hàng loạt.")
+        # Tạo file mẫu
+        mau_bao_hong = pd.DataFrame({
+            'Loại_VT': ['Công tơ', 'Modem'],
+            'Tên_Vật_Tư': ['Công tơ 1 pha', 'Modem 3G'],
+            'Nhà_CC': ['Vinasino', 'Nam Thanh'],
+            'Chủng_Loại': ['VSE11', 'NT-Router'],
+            'Số_Lượng': [2, 1],
+            'Lý_Do': ['Cháy hỏng', 'Mất tín hiệu']
+        })
+        st.download_button("📥 Tải file mẫu Báo hỏng", get_sample_excel(mau_bao_hong), "Mau_Bao_Hong.xlsx")
+        
         f_h = st.file_uploader("Nạp Excel Báo hỏng", type=["xlsx"])
-        if f_h and st.button("🚀 Nạp Excel Báo hỏng"):
-            df_bh = pd.read_excel(f_h)
-            df_bh['Thời_Gian_Báo'] = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            df_bh['Đơn_Vị'] = st.session_state.user_name
-            df_bh['Trạng_Thái'] = 'Chờ xử lý'
-            df_bh['Thời_Gian_Bù'] = '---'
-            confirm_dialog("bao_hong", df_bh)
+        if f_h and st.button("🚀 Gửi Excel"):
+            try:
+                df_bh = pd.read_excel(f_h)
+                # Tự động điền các cột hệ thống
+                df_bh['Thời_Gian_Báo'] = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                df_bh['Đơn_Vị'] = st.session_state.user_name
+                df_bh['Trạng_Thái'] = 'Chờ xử lý'
+                df_bh['Thời_Gian_Bù'] = '---'
+                
+                confirm_dialog("bao_hong", df_bh)
+            except Exception as e:
+                st.error(f"Lỗi file Excel: {e}")
+
+    # --- TAB 3: THEO DÕI TRẠNG THÁI (TÍNH NĂNG MỚI BẠN YÊU CẦU) ---
+    with t3:
+        st.subheader(f"📋 Danh sách yêu cầu của: {st.session_state.user_name}")
+        
+        # Lọc ra các yêu cầu CỦA CHÍNH ĐỘI ĐÓ
+        my_reqs = st.session_state.requests[st.session_state.requests['Đơn_Vị'] == st.session_state.user_name].copy()
+        
+        if not my_reqs.empty:
+            # Sắp xếp mới nhất lên đầu
+            my_reqs = my_reqs.sort_index(ascending=False)
+            
+            # Tô màu trạng thái cho dễ nhìn
+            def highlight_status(val):
+                color = '#d4edda' if val == 'Đã bù hàng' else '#fff3cd' # Xanh lá nhẹ nếu xong, Vàng nhẹ nếu chờ
+                return f'background-color: {color}'
+
+            st.dataframe(
+                my_reqs[['Thời_Gian_Báo', 'Tên_Vật_Tư', 'Số_Lượng', 'Lý_Do', 'Trạng_Thái', 'Thời_Gian_Bù']]
+                .style.applymap(highlight_status, subset=['Trạng_Thái']),
+                use_container_width=True,
+                column_config={
+                    "Trạng_Thái": st.column_config.TextColumn("Trạng thái", help="Xem đã được duyệt chưa"),
+                    "Thời_Gian_Bù": st.column_config.TextColumn("Ngày được cấp bù")
+                }
+            )
+            
+            # Thống kê nhanh
+            da_bu = len(my_reqs[my_reqs['Trạng_Thái'] == 'Đã bù hàng'])
+            dang_cho = len(my_reqs) - da_bu
+            st.caption(f"📊 Tổng kết: **{da_bu}** đã xong | **{dang_cho}** đang chờ.")
+            
+        else:
+            st.info("Bạn chưa gửi yêu cầu báo hỏng nào.")
 # --- ĐỘI: GỬI YÊU CẦU TRẢ (Bổ sung ghi nhật ký) ---
 elif menu == "📦 Hoàn Trả/Bảo Hành":
     st.header(f"📦 Yêu cầu Hoàn trả / Bảo hành: {st.session_state.user_name}")
@@ -1018,6 +1169,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
