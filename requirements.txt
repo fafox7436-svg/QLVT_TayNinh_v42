@@ -5,4 +5,5 @@ xlsxwriter
 openpyxl
 sqlalchemy
 psycopg2-binary
-pypdf
+pdfplumber
+
