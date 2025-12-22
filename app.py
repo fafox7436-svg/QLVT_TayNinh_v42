@@ -1019,50 +1019,47 @@ elif menu == "📜 Nhật ký Hệ thống":
 elif menu == "📂 Quản lý Văn bản":
     st.header("📂 Kho Văn Bản & Phân Bổ")
 
-    # 1. HÀM ĐỌC PDF (CÓ HIỂN THỊ LỖI CHI TIẾT)
+# --- 1. HÀM ĐỌC PDF "SIÊU MẠNH" (CHẤP NHẬN MỌI ĐỊNH DẠNG) ---
     def trich_xuat_thong_tin_pdf(uploaded_file):
         try:
-            # Reset con trỏ file về đầu để đảm bảo đọc được
-            uploaded_file.seek(0)
-            
             reader = PdfReader(uploaded_file)
             text = ""
+            # Đọc 2 trang đầu (đề phòng số văn bản bị đẩy sang trang 2)
+            for i in range(min(2, len(reader.pages))):
+                text += reader.pages[i].extract_text() + "\n"
             
-            # Đọc toàn bộ các trang (đề phòng thông tin nằm trang 2)
-            for page in reader.pages:
-                text += page.extract_text() + "\n"
+            # --- DEBUG: In ra console của server để kiểm tra nếu cần ---
+            # print(text) 
             
-            # --- DEBUG: IN RA MÀN HÌNH ĐỂ XEM MÁY ĐỌC ĐƯỢC GÌ ---
-            with st.expander("🔍 Bấm vào đây để xem nội dung máy đọc được (Debug)", expanded=True):
-                st.text(text) # In nguyên văn text ra
-                if not text.strip():
-                    st.error("⚠️ Cảnh báo: Máy không đọc được chữ nào! Có thể đây là file PDF dạng ảnh (Scan) hoặc bị mã hóa.")
-            # -----------------------------------------------------
-
             info = {"so": "", "ngay": None, "noi_dung": ""}
             
-            # 1. Tìm Số văn bản
-            # Thử regex linh hoạt hơn (chấp nhận khoảng trắng rộng)
-            match_so = re.search(r"Số:[\s\W_]*([0-9]+/[A-Z0-9\-]+)", text, re.IGNORECASE)
-            if match_so: info["so"] = match_so.group(1).strip()
+            # 1. TÌM SỐ VĂN BẢN (Cải tiến)
+            # Logic: Tìm chữ "Số", chấp nhận có hoặc không dấu ":", chấp nhận khoảng trắng lung tung
+            # Ví dụ bắt được hết: "Số: 5291", "Số 5291", "Số :5291"
+            match_so = re.search(r"Số\s*[:.]?\s*([0-9]+/[A-Z0-9\-\.]+)", text, re.IGNORECASE)
+            if match_so: 
+                info["so"] = match_so.group(1).strip()
             
-            # 2. Tìm Ngày tháng
-            match_ngay = re.search(r"ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})", text, re.IGNORECASE)
+            # 2. TÌM NGÀY THÁNG (Cải tiến mạnh)
+            # Logic: Chấp nhận mọi ký tự ngăn cách giữa chữ "ngày" và số (dấu chấm, phẩy, khoảng trắng...)
+            match_ngay = re.search(r"ngày\s*[\W_]*\s*(\d{1,2})\s*[\W_]*\s*tháng\s*[\W_]*\s*(\d{1,2})\s*[\W_]*\s*năm\s*[\W_]*\s*(\d{4})", text, re.IGNORECASE)
             if match_ngay:
                 d, m, y = map(int, match_ngay.groups())
                 info["ngay"] = datetime.date(y, m, d)
                 
-            # 3. Tìm Nội dung
-            match_nd = re.search(r"(V/v[\s\S]+?)(?=\n\s*(?:Kính gửi|Nơi nhận|Tây Ninh|CỘNG HÒA)|\n{3,})", text, re.IGNORECASE)
+            # 3. TÌM NỘI DUNG (Cải tiến)
+            # Logic: Làm sạch văn bản trước khi tìm để tránh bị xuống dòng cắt ngang
+            text_clean = re.sub(r'\n+', ' ', text) # Biến xuống dòng thành khoảng trắng
+            match_nd = re.search(r"(V/v\s+[\s\S]+?)(?=\s*(?:Kính gửi|Nơi nhận|Tây Ninh,|CỘNG HÒA))", text_clean, re.IGNORECASE)
             if match_nd:
                 raw = match_nd.group(1)
                 info["noi_dung"] = re.sub(r'\s+', ' ', raw).strip()
                 
             return info
         except Exception as e:
-            st.error(f"❌ Lỗi khi đọc file: {e}") # Hiện lỗi cụ thể nếu có
+            st.error(f"Lỗi đọc PDF: {e}")
             return {"so": "", "ngay": None, "noi_dung": ""}
-
+            
     # 2. FORM UPLOAD
     with st.expander("➕ Thêm văn bản mới", expanded=True):
         file_upload = st.file_uploader("Chọn file văn bản (PDF)", type=['pdf'])
@@ -1196,6 +1193,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
