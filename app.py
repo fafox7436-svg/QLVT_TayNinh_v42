@@ -366,40 +366,214 @@ elif menu == "🚨 Duyệt Báo Hỏng":
     else:
         st.info("Không có yêu cầu báo hỏng nào.")
 
+# --- MENU HIỆN TRƯỜNG & THAY THẾ THU HỒI (NÂNG CẤP) ---
 elif menu == "🛠️ Hiện trường (Seri)":
-    st.header(f"Cập nhật hiện trường: {st.session_state.user_name}")
-    df_dv = st.session_state.inventory[st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name].copy()
+    st.header(f"🛠️ Quản lý Hiện trường: {st.session_state.user_name}")
     
-    if not df_dv.empty:
-        loai_chon = st.selectbox("🎯 Chọn loại vật tư", ["Tất cả"] + list(df_dv['Loại_VT'].unique()))
-        df_display = df_dv if loai_chon == "Tất cả" else df_dv[df_dv['Loại_VT'] == loai_chon]
+    # Chia làm 3 Tab chuyên biệt
+    t1, t2, t3 = st.tabs(["✍️ Cập nhật trạng thái", "🔄 Thay thế & Thu hồi (1 đổi 1)", "⚠️ Kho Thu hồi & Hạn trả"])
+    
+    # --- TAB 1: CẬP NHẬT TRẠNG THÁI (Code cũ giữ nguyên logic) ---
+    with t1:
+        st.caption("Dùng để cập nhật thông tin các thiết bị đang giữ (chưa lắp hoặc đã lắp nhưng chưa nhập số liệu).")
+        df_dv = st.session_state.inventory[st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name].copy()
+        
+        if not df_dv.empty:
+            loai_chon = st.selectbox("🎯 Lọc loại vật tư", ["Tất cả"] + list(df_dv['Loại_VT'].unique()), key="loc_t1")
+            df_display = df_dv if loai_chon == "Tất cả" else df_dv[df_dv['Loại_VT'] == loai_chon]
 
-        t1, t2 = st.tabs(["✍️ Cập nhật tay", "📁 Excel Hiện trường"])
-        with t1:
-            # DÒNG NÀY PHẢI THỤT LỀ VÀO (Dòng 275)
             edited = st.data_editor(
                 df_display[['ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí']],
                 column_config={
                     "Trạng_Thái_Luoi": st.column_config.SelectboxColumn("TT", options=TRANG_THAI_LIST),
-                    # KHÔI PHỤC TÍNH NĂNG CHỌN MỤC ĐÍCH TẠI ĐÂY
                     "Mục_Đích": st.column_config.SelectboxColumn("Mục đích", options=MUC_DICH_LIST),
                     "Chi_Tiết_Vị_Trí": st.column_config.TextColumn("Ghi chú chi tiết")
                 }, 
                 disabled=['ID_He_Thong', 'Loại_VT', 'Mã_TB'], 
                 use_container_width=True,
-                key=f"edit_{loai_chon}"
+                key=f"edit_basic"
             )
-            # Dòng nút bấm cũng phải thụt lề vào để nằm trong 'with t1'
-            if st.button("💾 Lưu thay đổi hiện trường"):
+            if st.button("💾 Lưu cập nhật"):
                 confirm_dialog("hien_truong", edited)
-        with t2:
-            st.download_button("📥 Tải danh sách vật tư tại Đội", df_dv.to_csv(index=False).encode('utf-8-sig'), "Kho_Doi.csv")
-            f_ht = st.file_uploader("Nạp Excel hiện trường", type=["xlsx", "csv"])
-            if f_ht and st.button("🚀 Nạp Excel Hiện trường"):
-                df_ht = pd.read_excel(f_ht) if f_ht.name.endswith('xlsx') else pd.read_csv(f_ht)
-                confirm_dialog("hien_truong", df_ht)
-    else:
-        st.warning("Kho của Đội hiện đang trống.")
+        else:
+            st.info("Kho đội đang trống.")
+
+# --- TAB 2: QUẢN LÝ LẮP ĐẶT (TÁCH BIỆT LẮP MỚI & THAY THẾ) ---
+    with t2:
+        st.write("Chọn nghiệp vụ để hiển thị form tương ứng:")
+        
+        # 1. CẤU HÌNH CÔNG VIỆC (OUTSIDE FORM ĐỂ UPDATE GIAO DIỆN)
+        c_mode, c_lvt = st.columns([1.5, 1])
+        with c_mode:
+            # Chọn chế độ làm việc
+            nghiep_vu = st.radio(
+                "Nghiệp vụ thực hiện:", 
+                ["Lắp mới (Phát triển KH)", "Thay thế (Định kỳ/Đồng bộ/Sự cố)"], 
+                horizontal=True
+            )
+            is_thay_the = "Thay thế" in nghiep_vu
+        
+        with c_lvt:
+            # Lọc danh sách vật tư đang có trong kho của Đội
+            df_kho_doi = st.session_state.inventory[
+                (st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) &
+                (st.session_state.inventory['Trạng_Thái_Luoi'] == "Dưới kho")
+            ]
+            lvt_list = df_kho_doi['Loại_VT'].unique()
+            lvt_chon = st.selectbox("Loại thiết bị lắp", lvt_list if len(lvt_list)>0 else ["(Kho trống)"])
+            
+        # 2. CHỌN THIẾT BỊ MỚI (OUTSIDE FORM ĐỂ LOAD MODEL/SERI CHUẨN)
+        c3, c4 = st.columns(2)
+        with c3:
+            # Lọc Model theo Loại VT đã chọn
+            models = df_kho_doi[df_kho_doi['Loại_VT'] == lvt_chon]['Mã_TB'].unique() if len(lvt_list)>0 else []
+            model_chon = st.selectbox("Chọn Model", models if len(models)>0 else ["(Hết hàng)"])
+        
+        with c4:
+            # Lọc Seri theo Model đã chọn
+            seris = df_kho_doi[(df_kho_doi['Mã_TB'] == model_chon)]['Số_Seri'].unique() if model_chon != "(Hết hàng)" else []
+            seri_chon = st.selectbox("Chọn Số Seri lắp", seris if len(seris)>0 else ["(Hết hàng)"])
+
+        st.write("---")
+
+        # 3. FORM NHẬP LIỆU (CHỨA CÁC TRƯỜNG CÒN LẠI)
+        with st.form("f_thuc_hien_ht"):
+            st.subheader(f"📝 Phiếu thi công: {model_chon} - {seri_chon}")
+            
+            c_kh_1, c_kh_2 = st.columns(2)
+            kh_name = c_kh_1.text_input("Tên Khách hàng / Mã KH")
+            dia_chi = c_kh_2.text_input("Địa chỉ lắp đặt")
+            
+            # --- PHẦN THU HỒI (CHỈ HIỆN KHI CHỌN THAY THẾ) ---
+            ly_do = "Lắp mới P.Triển KH" # Mặc định
+            
+            if is_thay_the:
+                st.warning("🔄 Yêu cầu nhập thông tin thiết bị CŨ thu hồi về kho:")
+                rc1, rc2 = st.columns(2)
+                old_lvt = rc1.selectbox("Loại VT cũ", list(DANM_MUC_NCC.keys()), index=0)
+                old_model = rc2.text_input("Model/Chủng loại cũ", placeholder="Vd: VSE11-2018")
+                old_seri = rc1.text_input("Số Seri cũ (*Bắt buộc)")
+                old_idx = rc2.number_input("Chỉ số chốt (kWh)", min_value=0.0)
+                ly_do = st.selectbox("Lý do thay", ["Thay định kỳ", "Thay đồng bộ", "Thay hư hỏng", "Khác"])
+            
+            # NÚT XÁC NHẬN
+            submit = st.form_submit_button("🚀 Cập nhật Hiện trường")
+            
+            if submit:
+                # Validate dữ liệu
+                if seri_chon == "(Hết hàng)" or not seri_chon:
+                    st.error("❌ Chưa chọn thiết bị mới để lắp!")
+                elif is_thay_the and not old_seri:
+                    st.error("❌ Bắt buộc nhập Số Seri thiết bị cũ khi thay thế!")
+                else:
+                    # 1. CẬP NHẬT TRẠNG THÁI CÁI MỚI -> LÊN LƯỚI
+                    idx_new = st.session_state.inventory[
+                        (st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) &
+                        (st.session_state.inventory['Số_Seri'] == seri_chon)
+                    ].index
+                    
+                    st.session_state.inventory.loc[idx_new, 'Trạng_Thái_Luoi'] = "Đã đưa lên lưới"
+                    st.session_state.inventory.loc[idx_new, 'Mục_Đích'] = f"KH: {kh_name}"
+                    
+                    # Tạo ghi chú chi tiết
+                    detail_note = f"Đ/c: {dia_chi}. "
+                    if is_thay_the:
+                        detail_note += f"Thay cho: {old_seri} ({ly_do})"
+                    else:
+                        detail_note += "Lắp mới PTKH"
+                    
+                    st.session_state.inventory.loc[idx_new, 'Chi_Tiết_Vị_Trí'] = detail_note
+                    
+                    # 2. TẠO DÒNG THU HỒI CHO CÁI CŨ (NẾU LÀ THAY THẾ)
+                    if is_thay_the:
+                        # Tính hạn trả (7 ngày)
+                        today = datetime.datetime.now()
+                        deadline = (today + datetime.timedelta(days=7)).strftime("%d/%m/%Y")
+                        
+                        thu_hoi_row = pd.DataFrame([{
+                            'ID_He_Thong': f"TH-{uuid.uuid4().hex[:8].upper()}",
+                            'Năm_SX': "Thu hồi", 
+                            'Loại_VT': old_lvt, 
+                            'Mã_TB': old_model, 
+                            'Số_Seri': old_seri,
+                            'Nhà_CC': "Lưới thu hồi", 
+                            'Nguồn_Nhap': f"KH: {kh_name}", 
+                            'Vị_Trí_Kho': st.session_state.user_name, # Đang nằm ở Đội
+                            'Trạng_Thái_Luoi': "Vật tư thu hồi", # Trạng thái chờ trả
+                            'Mục_Đích': "Chờ kiểm định", 
+                            'Chi_Tiết_Vị_Trí': f"Hạn trả: {deadline} (Chỉ số: {old_idx}). Lý do: {ly_do}",
+                            'Thoi_Gian_Tao': today.strftime("%d/%m/%Y %H:%M"), 
+                            'Thoi_Gian_Cap_Phat': '---'
+                        }])
+                        st.session_state.inventory = pd.concat([st.session_state.inventory, thu_hoi_row], ignore_index=True)
+                        
+                        luu_nhat_ky("Thay thế", f"Lắp {seri_chon}, Thu hồi {old_seri} tại {dia_chi}")
+                    else:
+                        luu_nhat_ky("Lắp mới", f"Lắp mới {seri_chon} cho {kh_name} tại {dia_chi}")
+
+                    save_all()
+                    st.success("✅ Đã cập nhật thành công!")
+                    st.rerun()
+
+    # --- TAB 3: THEO DÕI HẠN TRẢ (CẢNH BÁO) ---
+    with t3:
+        st.subheader("⚠️ Danh sách Vật tư thu hồi (Cần trả về kho Công ty)")
+        
+        # Lọc các vật tư có trạng thái "Vật tư thu hồi" của Đội
+        df_thu_hoi = st.session_state.inventory[
+            (st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) &
+            (st.session_state.inventory['Trạng_Thái_Luoi'] == "Vật tư thu hồi")
+        ].copy()
+        
+        if not df_thu_hoi.empty:
+            # Tính toán số ngày còn lại
+            now = datetime.datetime.now()
+            
+            def check_deadline(note):
+                # Trích xuất ngày từ chuỗi "Hạn trả: 28/12/2025 ..."
+                try:
+                    match = re.search(r"Hạn trả: (\d{2}/\d{2}/\d{4})", str(note))
+                    if match:
+                        d_str = match.group(1)
+                        d_obj = datetime.datetime.strptime(d_str, "%d/%m/%Y")
+                        delta = (d_obj - now).days
+                        return delta, d_str
+                except:
+                    return 999, "KXD"
+                return 999, "KXD"
+
+            # Tạo danh sách hiển thị đẹp
+            display_data = []
+            for _, row in df_thu_hoi.iterrows():
+                days_left, d_str = check_deadline(row['Chi_Tiết_Vị_Trí'])
+                status_icon = "🟢"
+                msg = f"Còn {days_left} ngày"
+                
+                if days_left < 0:
+                    status_icon = "🔴"
+                    msg = f"QUÁ HẠN {-days_left} NGÀY!"
+                elif days_left <= 2:
+                    status_icon = "🟠"
+                    msg = f"Gấp! Còn {days_left} ngày"
+                
+                display_data.append({
+                    "Cảnh báo": status_icon,
+                    "Loại": row['Loại_VT'],
+                    "Seri Thu Hồi": row['Số_Seri'],
+                    "Hạn chót": d_str,
+                    "Tình trạng": msg,
+                    "Ghi chú": row['Chi_Tiết_Vị_Trí']
+                })
+            
+            st.dataframe(pd.DataFrame(display_data), use_container_width=True)
+            st.caption("🔴: Quá hạn (Cần trả ngay) | 🟠: Sắp hết hạn (<= 2 ngày) | 🟢: Còn hạn")
+            
+            # Nút tạo lệnh trả nhanh
+            if st.button("📦 Tạo lệnh Hoàn trả về kho Công ty ngay"):
+                # Chuyển hướng người dùng sang Menu Hoàn trả (Gợi ý)
+                st.info("Vui lòng qua menu '📦 Hoàn Trả/Bảo Hành' để lập phiếu xuất kho trả các vật tư này.")
+        else:
+            st.success("✅ Không có vật tư thu hồi nào tồn đọng.")
 
 elif menu == "🚨 Báo Hỏng":
     st.header("Báo Hỏng Thiết Bị")
@@ -793,6 +967,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
