@@ -1015,87 +1015,56 @@ elif menu == "📜 Nhật ký Hệ thống":
     except Exception as e:
         st.error(f"Lỗi kết nối bảng nhật ký: {e}")
 
-# --- MENU QUẢN LÝ VĂN BẢN (DÙNG PDFPLUMBER ĐỂ ĐỌC KÝ SỐ) ---
+# --- MENU QUẢN LÝ VĂN BẢN (GỌN NHẸ: CHỈ TRÍCH XUẤT NỘI DUNG) ---
 elif menu == "📂 Quản lý Văn bản":
     st.header("📂 Kho Văn Bản & Phân Bổ")
 
-    # 1. HÀM ĐỌC PDF CHUYÊN DỤNG CHO KÝ SỐ
-    def trich_xuat_thong_tin_pdf(uploaded_file):
+    # 1. HÀM ĐỌC PDF (Đơn giản hóa, chỉ tìm nội dung V/v)
+    def lay_noi_dung_trich_yeu(uploaded_file):
         try:
             text = ""
             with pdfplumber.open(uploaded_file) as pdf:
-                # Đọc tối đa 2 trang đầu
+                # Đọc 2 trang đầu
                 for i in range(min(2, len(pdf.pages))):
-                    page = pdf.pages[i]
-                    # extract_text() của pdfplumber đọc được cả text trong các lớp layer
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text + "\n"
+                    page_text = pdf.pages[i].extract_text()
+                    if page_text: text += page_text + "\n"
             
-            # --- DEBUG: Xem nội dung thực tế (dành cho bạn kiểm tra) ---
-            with st.expander("🔍 Debug: Nội dung thô (Xem máy đọc được số không)", expanded=False):
-                st.text(text[:1000]) 
-            
-            info = {"so": "", "ngay": None, "noi_dung": ""}
-            
-            # 1. TÌM SỐ VĂN BẢN (Regex linh hoạt)
-            # Tìm chuỗi dạng: 123/PCTN... hoặc Số: 123/PCTN...
-            # Dấu ?: nghĩa là cụm "Số..." có thể có hoặc không
-            match_so = re.search(r"(?:Số)?[:\s\.]*([0-9]+/[A-ZĐ0-9\-\.]+)", text, re.IGNORECASE)
-            if match_so: 
-                info["so"] = match_so.group(1).strip()
-            
-            # 2. TÌM NGÀY THÁNG
-            # Tìm chuỗi: ngày ... tháng ... năm ...
-            match_ngay = re.search(r"ng[àa]y\s*(\d{1,2})\s*th[áa]ng\s*(\d{1,2})\s*n[ăa]m\s*(\d{4})", text, re.IGNORECASE)
-            if match_ngay:
-                d, m, y = map(int, match_ngay.groups())
-                try:
-                    info["ngay"] = datetime.date(y, m, d)
-                except: pass
-
-            # 3. TÌM NỘI DUNG (V/v)
-            # Làm sạch xuống dòng để tìm V/v liền mạch
-            text_clean = re.sub(r'\n+', ' ', text)
+            # Tìm đoạn bắt đầu bằng "V/v" và kết thúc trước từ "Kính gửi/Nơi nhận..."
+            text_clean = re.sub(r'\n+', ' ', text) # Nối dòng
             match_nd = re.search(r"(V/v\s+[\s\S]+?)(?=\s*(?:Kính gửi|Nơi nhận|Tây Ninh|CỘNG HÒA))", text_clean, re.IGNORECASE)
+            
             if match_nd:
-                raw = match_nd.group(1)
-                info["noi_dung"] = re.sub(r'\s+', ' ', raw).strip()
-                
-            return info
-        except Exception as e:
-            st.error(f"Lỗi đọc file (pdfplumber): {e}")
-            return {"so": "", "ngay": None, "noi_dung": ""}
+                # Làm sạch khoảng trắng thừa
+                return re.sub(r'\s+', ' ', match_nd.group(1)).strip()
+            return ""
+        except:
+            return ""
 
     # 2. FORM UPLOAD
     with st.expander("➕ Thêm văn bản mới", expanded=True):
         file_upload = st.file_uploader("Chọn file văn bản (PDF)", type=['pdf'])
         
-        auto_so = ""
-        auto_ngay = datetime.date.today()
-        auto_nd = ""
+        auto_nd = "" # Biến chứa nội dung tự động
         
+        # Xử lý file ngay khi upload
         if file_upload is not None:
-            # Lưu ý: pdfplumber cần đọc file từ đầu, nên gọi hàm xử lý ngay
-            data_pdf = trich_xuat_thong_tin_pdf(file_upload)
-            
-            if data_pdf["so"]: auto_so = data_pdf["so"]
-            if data_pdf["ngay"]: auto_ngay = data_pdf["ngay"]
-            if data_pdf["noi_dung"]: auto_nd = data_pdf["noi_dung"]
-            
-            if data_pdf["so"] or data_pdf["noi_dung"]:
-                st.success(f"✅ Đã trích xuất: {auto_so}")
-            else:
-                st.warning("⚠️ Không tìm thấy thông tin. Có thể đây là file ảnh (Scan) hoặc ký số dạng hình ảnh.")
+            # Chỉ lấy nội dung, không lấy số/ngày nữa
+            auto_nd = lay_noi_dung_trich_yeu(file_upload)
+            if auto_nd:
+                st.toast("✅ Đã copy xong nội dung trích yếu!")
 
         with st.form("upload_doc"):
             c1, c2 = st.columns([1, 2])
-            so_hieu = c1.text_input("Số văn bản", value=auto_so, placeholder="Vd: 5291/PCTN-KD")
-            ngay_ky = c1.date_input("Ngày ký", value=auto_ngay)
+            
+            # Phần này để trống hoặc mặc định hôm nay để bạn TỰ NHẬP
+            so_hieu = c1.text_input("Số văn bản", placeholder="Nhập số (Vd: 5291/PCTN-KD)")
+            ngay_ky = c1.date_input("Ngày ký", value=datetime.date.today())
             loai_vb = c1.selectbox("Loại văn bản", ["Quyết định Phân bổ", "Lệnh Điều chuyển", "Công văn", "Khác"])
             
             doi_lien_quan = c2.multiselect("Phân bổ cho Đội nào? (Ghi chú)", DANH_SACH_14_DOI)
-            mo_ta = c2.text_area("Nội dung / Trích yếu", value=auto_nd, height=100)
+            
+            # Ô này sẽ TỰ ĐỘNG ĐIỀN nội dung máy đọc được
+            mo_ta = c2.text_area("Nội dung / Trích yếu (Tự động điền)", value=auto_nd, height=100)
             
             if st.form_submit_button("💾 Lưu trữ"):
                 if not file_upload:
@@ -1124,7 +1093,7 @@ elif menu == "📂 Quản lý Văn bản":
                     st.success("Lưu thành công!")
                     st.rerun()
 
-    # 3. DANH SÁCH VĂN BẢN (GIỮ NGUYÊN CODE CŨ ĐÃ FIX LỖI KEY)
+    # 3. DANH SÁCH VĂN BẢN (Giữ nguyên phần hiển thị đã sửa lỗi Key)
     st.write("---")
     st.subheader("🗃 Danh sách văn bản")
     engine = get_engine()
@@ -1188,6 +1157,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
