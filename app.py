@@ -1015,7 +1015,7 @@ elif menu == "📜 Nhật ký Hệ thống":
     except Exception as e:
         st.error(f"Lỗi kết nối bảng nhật ký: {e}")
 
-# --- MENU QUẢN LÝ VĂN BẢN (FINAL: SỬA LỖI HIỂN THỊ + GHI CHÚ) ---
+# --- MENU QUẢN LÝ VĂN BẢN (ĐÃ SỬA LỖI THỤT DÒNG & GIỜ VN) ---
 elif menu == "📂 Quản lý Văn bản":
     st.header("📂 Kho Văn Bản & Phân Bổ")
 
@@ -1065,7 +1065,6 @@ elif menu == "📂 Quản lý Văn bản":
             ngay_ky = c1.date_input("Ngày ký", value=auto_ngay)
             loai_vb = c1.selectbox("Loại văn bản", ["Quyết định Phân bổ", "Lệnh Điều chuyển", "Công văn", "Khác"])
             
-            # Chọn Đội (Ghi chú)
             doi_lien_quan = c2.multiselect("Phân bổ cho Đội nào? (Ghi chú)", DANH_SACH_14_DOI)
             mo_ta = c2.text_area("Nội dung / Trích yếu", value=auto_nd, height=100)
             
@@ -1078,7 +1077,8 @@ elif menu == "📂 Quản lý Văn bản":
                     file_bytes = file_upload.read()
                     ghi_chu_txt = ", ".join(doi_lien_quan) if doi_lien_quan else ""
                     
-                   doc_data = pd.DataFrame([{
+                    # --- ĐOẠN NÀY ĐÃ ĐƯỢC CĂN LỀ CHUẨN ---
+                    doc_data = pd.DataFrame([{
                         'id': str(uuid.uuid4()),
                         'loai_vb': loai_vb,
                         'so_hieu': so_hieu,
@@ -1088,9 +1088,7 @@ elif menu == "📂 Quản lý Văn bản":
                         'file_data': file_bytes,
                         'file_name': file_upload.name,
                         'nguoi_upload': st.session_state.user_name,
-                        
-                        # SỬA DÒNG NÀY:
-                        'thoi_gian_up': get_vn_time() 
+                        'thoi_gian_up': get_vn_time() # Đã dùng hàm giờ VN
                     }])
                     
                     with engine.begin() as conn:
@@ -1098,6 +1096,54 @@ elif menu == "📂 Quản lý Văn bản":
                     st.success("Lưu thành công!")
                     st.rerun()
 
+    # 3. DANH SÁCH VĂN BẢN
+    st.write("---")
+    st.subheader("🗃 Danh sách văn bản")
+    engine = get_engine()
+    
+    try:
+        query = "SELECT id, so_hieu, ngay_ky, mo_ta, loai_vb, file_name, ghi_chu FROM documents ORDER BY thoi_gian_up DESC LIMIT 20"
+        df_docs = pd.read_sql(query, engine)
+        
+        if not df_docs.empty:
+            for i, row in df_docs.iterrows():
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([1.5, 4, 1.2])
+                    
+                    with c1:
+                        st.markdown(f"**{row['so_hieu']}**")
+                        st.caption(f"📅 {row['ngay_ky']}")
+                        st.caption(f"🏷️ {row['loai_vb']}")
+                    
+                    with c2:
+                        st.markdown(f"**V/v:** {row['mo_ta']}")
+                        if row['ghi_chu']:
+                            st.info(f"👉 **Phân bổ:** {row['ghi_chu']}")
+                        else:
+                            st.caption("_(Chung / Chưa có ghi chú)_")
+                        st.caption(f"File: {row['file_name']}")
+                    
+                    with c3:
+                        btn_dl, btn_del = st.columns(2)
+                        with btn_dl:
+                            file_q = pd.read_sql(f"SELECT file_data FROM documents WHERE id='{row['id']}'", engine)
+                            if not file_q.empty:
+                                raw_data = file_q.iloc[0]['file_data']
+                                if raw_data:
+                                    st.download_button("📥", data=bytes(raw_data), file_name=row['file_name'], mime='application/pdf', key=f"dl_{row['id']}")
+                        
+                        with btn_del:
+                            if st.button("🗑️", key=f"del_{row['id']}", type="primary"):
+                                with engine.begin() as conn:
+                                    conn.exec_driver_sql(f"DELETE FROM documents WHERE id = '{row['id']}'")
+                                st.toast("Đã xóa!")
+                                st.rerun()
+        else:
+            st.info("Chưa có văn bản nào.")
+            
+    except Exception as e:
+        st.error(f"Lỗi tải danh sách: {e}")
+        
     # 3. DANH SÁCH VĂN BẢN (ĐÃ FIX LỖI MEMORYVIEW)
     st.write("---")
     st.subheader("🗃 Danh sách văn bản")
@@ -1186,6 +1232,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
