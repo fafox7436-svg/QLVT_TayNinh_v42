@@ -275,17 +275,25 @@ if menu == "📊 Giám sát & Dashboard":
 elif menu == "📥 Nhập Kho":
     st.header("Nhập Vật Tư Mới")
     t1, t2 = st.tabs(["✍️ Nhập tay", "📁 Excel Nhập"])
+    
+    # --- TAB 1: NHẬP TAY (ĐÃ SỬA LỖI LIST NHÀ CC) ---
     with t1:
+        # 1. Đưa Loại VT ra ngoài form để App cập nhật danh sách Nhà CC ngay lập tức
+        lvt = st.selectbox("Chọn Loại Vật Tư", list(DANM_MUC_NCC.keys()))
+        
+        # 2. Form nhập liệu (Chứa các thông tin còn lại)
         with st.form("f_nhap"):
-            lvt = st.selectbox("Loại VT", list(DANM_MUC_NCC.keys()))
-            ncc = st.selectbox("Nhà CC", DANM_MUC_NCC[lvt])
+            # Danh sách Nhà CC sẽ thay đổi dựa theo lvt bên trên
+            ncc = st.selectbox("Nhà Cung Cấp", DANM_MUC_NCC[lvt])
+            
             c1, c2 = st.columns(2)
             with c1:
-                ng = st.selectbox("Nguồn", NGUON_NHAP_NGOAI)
-                kh = st.selectbox("Kho", CO_SO)
+                ng = st.selectbox("Nguồn nhập", NGUON_NHAP_NGOAI)
+                kh = st.selectbox("Nhập vào kho", CO_SO)
             with c2:
-                mod = st.text_input("Model")
+                mod = st.text_input("Model/Mã thiết bị")
                 sl = st.number_input("Số lượng", min_value=1, step=1)
+                
             if st.form_submit_button("🚀 Gửi xác nhận"):
                 now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                 new_rows = []
@@ -785,6 +793,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
