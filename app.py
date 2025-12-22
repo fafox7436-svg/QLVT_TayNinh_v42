@@ -7,6 +7,10 @@ import os
 import uuid
 import re
 from pypdf import PdfReader
+# --- HÀM LẤY GIỜ VIỆT NAM (DÙNG CHO TOÀN BỘ APP) ---
+def get_vn_time():
+    # Lấy giờ hiện tại của server + 7 tiếng
+    return (datetime.datetime.now() + datetime.timedelta(hours=7)).strftime("%d/%m/%Y %H:%M:%S")
 
 # --- 1. CẤU HÌNH HỆ THỐNG ---
 st.set_page_config(page_title="Hệ thống QLVT PC Tây Ninh - v42 Full Sync GS", layout="wide")
@@ -58,7 +62,9 @@ def get_engine():
 def luu_nhat_ky(hanh_dong, noi_dung):
     try:
         engine = get_engine()
-        now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        # SỬA DÒNG NÀY: Dùng hàm get_vn_time()
+        now = get_vn_time() 
+        
         user = st.session_state.user_name if 'user_name' in st.session_state else "Unknown"
         
         log_df = pd.DataFrame([{
@@ -382,8 +388,15 @@ elif menu == "🚨 Duyệt Báo Hỏng":
             
             # Nút duyệt
             if st.button("✅ Phê duyệt bù hàng ngay"):
-                # Lấy những dòng được tích chọn
                 to_app = edited[edited["Duyệt"] == True]
+                
+                if not to_app.empty:
+                    target_indices = to_app.index.tolist()
+                    
+                    # SỬA DÒNG NÀY:
+                    now_str = get_vn_time()
+                    
+                    st.session_state.requests.loc[target_indices, 'Trạng_Thái'] = "Đã bù hàng"
                 
                 if not to_app.empty:
                     # Lấy danh sách Index (Vị trí dòng) của các yêu cầu được chọn
@@ -728,9 +741,11 @@ elif menu == "🚨 Báo Hỏng":
             ly_do = st.text_area("Lý do hỏng/Mô tả tình trạng")
             
             if st.form_submit_button("🚀 Gửi báo hỏng"):
-                now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                # SỬA DÒNG NÀY:
+                now = get_vn_time()
+                
                 new_h = pd.DataFrame([{
-                    'Thời_Gian_Báo': now, 
+                    'Thời_Gian_Báo': now,
                     'Đơn_Vị': st.session_state.user_name, 
                     'Loại_VT': lvt, 
                     'Tên_Vật_Tư': tvt, 
@@ -1063,17 +1078,19 @@ elif menu == "📂 Quản lý Văn bản":
                     file_bytes = file_upload.read()
                     ghi_chu_txt = ", ".join(doi_lien_quan) if doi_lien_quan else ""
                     
-                    doc_data = pd.DataFrame([{
+                   doc_data = pd.DataFrame([{
                         'id': str(uuid.uuid4()),
                         'loai_vb': loai_vb,
                         'so_hieu': so_hieu,
                         'ngay_ky': ngay_ky.strftime("%d/%m/%Y"),
                         'mo_ta': mo_ta,
-                        'ghi_chu': ghi_chu_txt, # Lưu ghi chú
+                        'ghi_chu': ghi_chu_txt,
                         'file_data': file_bytes,
                         'file_name': file_upload.name,
                         'nguoi_upload': st.session_state.user_name,
-                        'thoi_gian_up': datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+                        
+                        # SỬA DÒNG NÀY:
+                        'thoi_gian_up': get_vn_time() 
                     }])
                     
                     with engine.begin() as conn:
@@ -1169,6 +1186,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
