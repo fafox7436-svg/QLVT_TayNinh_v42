@@ -616,81 +616,76 @@ elif menu == "📜 Nhật ký Hệ thống":
     except Exception as e:
         st.error(f"Lỗi kết nối bảng nhật ký: {e}")
 
-# --- MENU QUẢN LÝ VĂN BẢN (ĐÃ NÂNG CẤP TỰ ĐỘNG ĐỌC PDF) ---
+# --- MENU QUẢN LÝ VĂN BẢN (ĐÃ SỬA LỖI & THÊM NÚT XÓA) ---
 elif menu == "📂 Quản lý Văn bản":
     st.header("📂 Kho Văn Bản & Tự Động Trích Xuất")
 
-    # --- HÀM HỖ TRỢ ĐỌC PDF ---
+    # --- HÀM TRÍCH XUẤT PDF THÔNG MINH (Sửa lỗi thiếu số hiệu) ---
     def trich_xuat_thong_tin_pdf(uploaded_file):
         try:
             reader = PdfReader(uploaded_file)
             text = ""
-            # Chỉ đọc trang đầu tiên vì thông tin số/ngày thường ở đây
             if len(reader.pages) > 0:
                 text = reader.pages[0].extract_text()
             
             info = {"so": "", "ngay": None, "noi_dung": ""}
             
-            # 1. Tìm Số văn bản (Mẫu: Số: 5291/PCTN-KD)
-            match_so = re.search(r"Số:\s*([^\n\r]+)", text, re.IGNORECASE)
+            # 1. Tìm Số văn bản: Cải tiến để bắt được cả số nằm xa chữ "Số:"
+            # Tìm chuỗi dạng "5291/..." bất kể có khoảng trắng hay xuống dòng
+            match_so = re.search(r"Số:[\s\n._-]*([\d]+/[A-Z0-9\-]+)", text, re.IGNORECASE)
             if match_so:
                 info["so"] = match_so.group(1).strip()
             
-            # 2. Tìm Ngày tháng (Mẫu: ngày 10 tháng 12 năm 2025)
+            # 2. Tìm Ngày tháng
             match_ngay = re.search(r"ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})", text, re.IGNORECASE)
             if match_ngay:
                 d, m, y = map(int, match_ngay.groups())
                 info["ngay"] = datetime.date(y, m, d)
                 
-            # 3. Tìm Nội dung/Trích yếu (Mẫu: V/v phân bổ...)
-            # Lấy dòng bắt đầu bằng V/v và có thể kéo dài xuống dòng dưới
-            match_nd = re.search(r"(V/v\s+[\s\S]+?)(?=\n\n|\n[A-ZĐ])", text, re.IGNORECASE)
+            # 3. Tìm Nội dung (V/v): Cải tiến để lấy hết nội dung dù bị ngắt dòng
+            # Lấy từ "V/v" cho đến khi gặp các từ khóa kết thúc như "Kính gửi", "Nơi nhận" hoặc 3 dòng trống
+            match_nd = re.search(r"(V/v[\s\S]+?)(?=\n\s*(?:Kính gửi|Nơi nhận|Tây Ninh|CỘNG HÒA)|\n{3,})", text, re.IGNORECASE)
             if match_nd:
-                # Xử lý xuống dòng thừa
-                info["noi_dung"] = match_nd.group(1).replace("\n", " ").strip()
+                raw = match_nd.group(1)
+                # Nối các dòng bị ngắt lại thành 1 câu hoàn chỉnh
+                info["noi_dung"] = re.sub(r'\s+', ' ', raw).strip()
                 
             return info
         except Exception as e:
             return {"so": "", "ngay": None, "noi_dung": ""}
 
-    # 1. FORM UPLOAD THÔNG MINH
+    # --- FORM UPLOAD ---
     with st.expander("➕ Thêm văn bản mới (Upload PDF để tự điền)", expanded=True):
-        # Cho upload trước để xử lý
-        file_upload = st.file_uploader("Bước 1: Chọn file văn bản gốc (PDF)", type=['pdf'])
+        file_upload = st.file_uploader("Chọn file văn bản (PDF)", type=['pdf'])
         
-        # Biến tạm để lưu thông tin tự động
+        # Biến tạm
         auto_so = ""
         auto_ngay = datetime.date.today()
         auto_nd = ""
         
-        if file_upload is not None:
-            # Nếu là PDF, tiến hành đọc thử
-            if file_upload.name.endswith('.pdf'):
-                st.toast("Dang đọc nội dung văn bản...")
-                data_pdf = trich_xuat_thong_tin_pdf(file_upload)
-                
-                if data_pdf["so"]: auto_so = data_pdf["so"]
-                if data_pdf["ngay"]: auto_ngay = data_pdf["ngay"]
-                if data_pdf["noi_dung"]: auto_nd = data_pdf["noi_dung"]
-                
-                st.success("✅ Đã trích xuất thông tin từ file!")
+        if file_upload is not None and file_upload.name.endswith('.pdf'):
+            # Đọc thử file
+            data_pdf = trich_xuat_thong_tin_pdf(file_upload)
+            if data_pdf["so"]: auto_so = data_pdf["so"]
+            if data_pdf["ngay"]: auto_ngay = data_pdf["ngay"]
+            if data_pdf["noi_dung"]: auto_nd = data_pdf["noi_dung"]
+            st.success("✅ Đã đọc xong nội dung file!")
 
-        # Form hiển thị (đã được điền sẵn nếu đọc được)
         with st.form("upload_doc"):
-            st.write("Result: Kiểm tra và chỉnh sửa thông tin")
             c1, c2 = st.columns([1, 2])
             so_hieu = c1.text_input("Số văn bản", value=auto_so, placeholder="Vd: 5291/PCTN-KD")
             ngay_ky = c1.date_input("Ngày ký", value=auto_ngay)
             loai_vb = c1.selectbox("Loại văn bản", ["Quyết định Phân bổ", "Lệnh Điều chuyển", "Công văn", "Khác"])
             
-            mo_ta = c2.text_area("Nội dung / Trích yếu", value=auto_nd, height=100, placeholder="V/v...")
+            mo_ta = c2.text_area("Nội dung / Trích yếu", value=auto_nd, height=100)
             
-            if st.form_submit_button("💾 Lưu trữ văn bản"):
+            if st.form_submit_button("💾 Lưu trữ"):
                 if file_upload is None:
                     st.error("Chưa đính kèm file!")
                 else:
                     engine = get_engine()
-                    file_bytes = file_upload.getvalue() # Đọc lại bytes để lưu
+                    file_upload.seek(0) # Reset file để đọc lại từ đầu
+                    file_bytes = file_upload.read()
                     
                     doc_data = pd.DataFrame([{
                         'id': str(uuid.uuid4()),
@@ -698,7 +693,7 @@ elif menu == "📂 Quản lý Văn bản":
                         'so_hieu': so_hieu,
                         'ngay_ky': ngay_ky.strftime("%d/%m/%Y"),
                         'mo_ta': mo_ta,
-                        'file_data': file_bytes,
+                        'file_data': file_bytes, # Lưu file
                         'file_name': file_upload.name,
                         'nguoi_upload': st.session_state.user_name,
                         'thoi_gian_up': datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -706,57 +701,61 @@ elif menu == "📂 Quản lý Văn bản":
                     
                     with engine.begin() as conn:
                         doc_data.to_sql('documents', conn, if_exists='append', index=False)
-                    st.success("Đã lưu văn bản vào kho!")
+                    st.success("Lưu thành công!")
                     st.rerun()
 
-    # 2. DANH SÁCH VĂN BẢN (ĐÃ FIX LỖI MEMORYVIEW)
+    # --- DANH SÁCH VĂN BẢN (ĐÃ SỬA LỖI HIỂN THỊ + NÚT TẢI/XÓA) ---
     st.write("---")
-    st.subheader("🗃 Danh sách văn bản đã lưu")
+    st.subheader("🗃 Danh sách văn bản")
     engine = get_engine()
+    
     try:
-        # QUAN TRỌNG: KHÔNG SELECT CỘT 'file_data' Ở ĐÂY ĐỂ TRÁNH LỖI VÀ TREO APP
-        query = """
-            SELECT id, so_hieu, ngay_ky, mo_ta, loai_vb, file_name 
-            FROM documents 
-            ORDER BY thoi_gian_up DESC
-        """
+        # QUAN TRỌNG: KHÔNG SELECT CỘT 'file_data' Ở ĐÂY để tránh lỗi memoryview
+        query = "SELECT id, so_hieu, ngay_ky, mo_ta, loai_vb, file_name FROM documents ORDER BY thoi_gian_up DESC LIMIT 20"
         df_docs = pd.read_sql(query, engine)
         
         if not df_docs.empty:
             for i, row in df_docs.iterrows():
                 with st.container(border=True):
-                    c1, c2, c3 = st.columns([1.5, 4, 1])
+                    c1, c2, c3 = st.columns([1.5, 4, 1.5])
                     
-                    # Cột 1: Số hiệu & Ngày
                     with c1:
                         st.markdown(f"**{row['so_hieu']}**")
                         st.caption(f"📅 {row['ngay_ky']}")
                         st.caption(f"🏷️ {row['loai_vb']}")
                     
-                    # Cột 2: Nội dung
                     with c2:
                         st.markdown(f"**V/v:** {row['mo_ta']}")
                         st.caption(f"File: {row['file_name']}")
                     
-                    # Cột 3: Nút tải (Chỉ lấy file_data khi bấm nút này)
                     with c3:
-                        if st.button("📥 Tải về", key=f"dl_{row['id']}"):
-                            # Lúc này mới query lấy file nặng
-                            file_q = pd.read_sql(f"SELECT file_data FROM documents WHERE id='{row['id']}'", engine)
-                            if not file_q.empty:
-                                st.download_button(
-                                    label="Lưu File",
-                                    data=file_q.iloc[0]['file_data'],
-                                    file_name=row['file_name'],
-                                    mime='application/pdf',
-                                    key=f"real_dl_{row['id']}"
-                                )
+                        # 1. NÚT TẢI (Query file riêng cho từng dòng)
+                        # Để đảm bảo nút tải hoạt động, ta lấy dữ liệu file NGAY TẠI ĐÂY
+                        file_q = pd.read_sql(f"SELECT file_data FROM documents WHERE id='{row['id']}'", engine)
+                        if not file_q.empty:
+                            file_bytes_dl = file_q.iloc[0]['file_data']
+                            st.download_button(
+                                label="📥 Tải về",
+                                data=file_bytes_dl,
+                                file_name=row['file_name'],
+                                mime='application/pdf',
+                                key=f"dl_{row['id']}",
+                                use_container_width=True
+                            )
+                        
+                        # 2. NÚT XÓA (Thêm khoảng cách cho đẹp)
+                        st.write("") 
+                        if st.button("🗑️ Xóa", key=f"del_{row['id']}", type="primary", use_container_width=True):
+                            with engine.begin() as conn:
+                                conn.exec_driver_sql(f"DELETE FROM documents WHERE id = '{row['id']}'")
+                            st.toast("Đã xóa văn bản!")
+                            st.rerun()
         else:
             st.info("Chưa có văn bản nào.")
             
     except Exception as e:
         st.error(f"Lỗi tải danh sách: {e}")
-
+        
 # Thêm vào menu của Admin
 # --- Nối tiếp vào các elif bên trên ---
 elif menu == "📜 Nhật ký Hoạt động":
@@ -784,6 +783,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
