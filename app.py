@@ -6,7 +6,7 @@ import io
 import os
 import uuid
 import re
-from pypdf import PdfReader
+import pdfplumber
 # --- HÀM LẤY GIỜ VIỆT NAM (DÙNG CHO TOÀN BỘ APP) ---
 def get_vn_time():
     # Lấy giờ hiện tại của server + 7 tiếng
@@ -1015,52 +1015,48 @@ elif menu == "📜 Nhật ký Hệ thống":
     except Exception as e:
         st.error(f"Lỗi kết nối bảng nhật ký: {e}")
 
-# --- MENU QUẢN LÝ VĂN BẢN (UPDATE: LOGIC TÌM SỐ & NGÀY MỚI) ---
+# --- MENU QUẢN LÝ VĂN BẢN (DÙNG PDFPLUMBER ĐỂ ĐỌC KÝ SỐ) ---
 elif menu == "📂 Quản lý Văn bản":
     st.header("📂 Kho Văn Bản & Phân Bổ")
 
-    # 1. HÀM ĐỌC PDF (LOGIC MỚI)
+    # 1. HÀM ĐỌC PDF CHUYÊN DỤNG CHO KÝ SỐ
     def trich_xuat_thong_tin_pdf(uploaded_file):
         try:
-            reader = PdfReader(uploaded_file)
             text = ""
-            # Đọc 2 trang đầu
-            for i in range(min(2, len(reader.pages))):
-                text += reader.pages[i].extract_text() + "\n"
+            with pdfplumber.open(uploaded_file) as pdf:
+                # Đọc tối đa 2 trang đầu
+                for i in range(min(2, len(pdf.pages))):
+                    page = pdf.pages[i]
+                    # extract_text() của pdfplumber đọc được cả text trong các lớp layer
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
             
-            # --- DEBUG: HIỆN TEXT GỐC ĐỂ KIỂM TRA ---
-            with st.expander("🔍 Debug: Xem máy đọc được gì từ file này", expanded=False):
-                st.text(text[:1000]) # Chỉ hiện 1000 ký tự đầu
-            # ----------------------------------------
-
+            # --- DEBUG: Xem nội dung thực tế (dành cho bạn kiểm tra) ---
+            with st.expander("🔍 Debug: Nội dung thô (Xem máy đọc được số không)", expanded=False):
+                st.text(text[:1000]) 
+            
             info = {"so": "", "ngay": None, "noi_dung": ""}
             
-            # 1. TÌM NGÀY THÁNG (Tìm bất cứ đâu có dạng: ngày...tháng...năm...)
-            # \s* nghĩa là chấp nhận dính liền hoặc cách xa, \W* chấp nhận lỗi font ký tự lạ
+            # 1. TÌM SỐ VĂN BẢN (Regex linh hoạt)
+            # Tìm chuỗi dạng: 123/PCTN... hoặc Số: 123/PCTN...
+            # Dấu ?: nghĩa là cụm "Số..." có thể có hoặc không
+            match_so = re.search(r"(?:Số)?[:\s\.]*([0-9]+/[A-ZĐ0-9\-\.]+)", text, re.IGNORECASE)
+            if match_so: 
+                info["so"] = match_so.group(1).strip()
+            
+            # 2. TÌM NGÀY THÁNG
+            # Tìm chuỗi: ngày ... tháng ... năm ...
             match_ngay = re.search(r"ng[àa]y\s*(\d{1,2})\s*th[áa]ng\s*(\d{1,2})\s*n[ăa]m\s*(\d{4})", text, re.IGNORECASE)
             if match_ngay:
                 d, m, y = map(int, match_ngay.groups())
                 try:
                     info["ngay"] = datetime.date(y, m, d)
-                except:
-                    pass # Bỏ qua nếu ngày không hợp lệ (vd: ngày 32)
-
-            # 2. TÌM SỐ VĂN BẢN (Ưu tiên tìm mẫu có dấu gạch chéo /)
-            # Văn bản VN luôn có dạng: Số: 123/ABCD... hoặc chỉ 123/ABCD...
-            # Regex này tìm chuỗi: (Số...) + (Chữ số) + / + (Chữ cái in hoa hoặc số)
-            match_so = re.search(r"(?:Số)?[:\s\.]*(\d+/[A-ZĐ0-9\-\.]+)", text, re.IGNORECASE)
-            
-            # Nếu tìm thấy và nó nằm ở phần đầu văn bản (tránh bắt nhầm số ký hiệu ở cuối)
-            if match_so:
-                info["so"] = match_so.group(1).strip()
-            else:
-                # Fallback: Nếu không tìm thấy, thử tìm số đơn lẻ sau chữ "Số:" (ít dùng nhưng phòng hờ)
-                match_so_simple = re.search(r"Số[:\s]+(\d{2,5})\b", text[:500], re.IGNORECASE)
-                if match_so_simple:
-                    info["so"] = match_so_simple.group(1).strip()
+                except: pass
 
             # 3. TÌM NỘI DUNG (V/v)
-            text_clean = re.sub(r'\n+', ' ', text) # Nối dòng
+            # Làm sạch xuống dòng để tìm V/v liền mạch
+            text_clean = re.sub(r'\n+', ' ', text)
             match_nd = re.search(r"(V/v\s+[\s\S]+?)(?=\s*(?:Kính gửi|Nơi nhận|Tây Ninh|CỘNG HÒA))", text_clean, re.IGNORECASE)
             if match_nd:
                 raw = match_nd.group(1)
@@ -1068,7 +1064,7 @@ elif menu == "📂 Quản lý Văn bản":
                 
             return info
         except Exception as e:
-            st.error(f"Lỗi đọc PDF: {e}")
+            st.error(f"Lỗi đọc file (pdfplumber): {e}")
             return {"so": "", "ngay": None, "noi_dung": ""}
 
     # 2. FORM UPLOAD
@@ -1079,16 +1075,18 @@ elif menu == "📂 Quản lý Văn bản":
         auto_ngay = datetime.date.today()
         auto_nd = ""
         
-        if file_upload and file_upload.name.endswith('.pdf'):
+        if file_upload is not None:
+            # Lưu ý: pdfplumber cần đọc file từ đầu, nên gọi hàm xử lý ngay
             data_pdf = trich_xuat_thong_tin_pdf(file_upload)
+            
             if data_pdf["so"]: auto_so = data_pdf["so"]
             if data_pdf["ngay"]: auto_ngay = data_pdf["ngay"]
             if data_pdf["noi_dung"]: auto_nd = data_pdf["noi_dung"]
             
-            if data_pdf["so"] or data_pdf["ngay"]:
-                st.success(f"✅ Đã tìm thấy: Số {auto_so} | Ngày {auto_ngay.strftime('%d/%m/%Y')}")
+            if data_pdf["so"] or data_pdf["noi_dung"]:
+                st.success(f"✅ Đã trích xuất: {auto_so}")
             else:
-                st.warning("⚠️ Không tự động đọc được Số/Ngày. Vui lòng nhập tay.")
+                st.warning("⚠️ Không tìm thấy thông tin. Có thể đây là file ảnh (Scan) hoặc ký số dạng hình ảnh.")
 
         with st.form("upload_doc"):
             c1, c2 = st.columns([1, 2])
@@ -1126,15 +1124,13 @@ elif menu == "📂 Quản lý Văn bản":
                     st.success("Lưu thành công!")
                     st.rerun()
 
-    # 3. DANH SÁCH VĂN BẢN (KHÔNG ĐỔI)
+    # 3. DANH SÁCH VĂN BẢN (GIỮ NGUYÊN CODE CŨ ĐÃ FIX LỖI KEY)
     st.write("---")
     st.subheader("🗃 Danh sách văn bản")
     engine = get_engine()
-    
     try:
         query = "SELECT id, so_hieu, ngay_ky, mo_ta, loai_vb, file_name, ghi_chu FROM documents ORDER BY thoi_gian_up DESC LIMIT 20"
         df_docs = pd.read_sql(query, engine)
-        
         if not df_docs.empty:
             for i, row in df_docs.iterrows():
                 with st.container(border=True):
@@ -1192,6 +1188,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
