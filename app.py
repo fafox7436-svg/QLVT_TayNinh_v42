@@ -1015,7 +1015,7 @@ elif menu == "📜 Nhật ký Hệ thống":
     except Exception as e:
         st.error(f"Lỗi kết nối bảng nhật ký: {e}")
 
-# --- MENU QUẢN LÝ VĂN BẢN (ĐÃ SỬA LỖI THỤT DÒNG & GIỜ VN) ---
+# --- MENU QUẢN LÝ VĂN BẢN (FIX LỖI TRÙNG KEY) ---
 elif menu == "📂 Quản lý Văn bản":
     st.header("📂 Kho Văn Bản & Phân Bổ")
 
@@ -1077,7 +1077,6 @@ elif menu == "📂 Quản lý Văn bản":
                     file_bytes = file_upload.read()
                     ghi_chu_txt = ", ".join(doi_lien_quan) if doi_lien_quan else ""
                     
-                    # --- ĐOẠN NÀY ĐÃ ĐƯỢC CĂN LỀ CHUẨN ---
                     doc_data = pd.DataFrame([{
                         'id': str(uuid.uuid4()),
                         'loai_vb': loai_vb,
@@ -1088,7 +1087,7 @@ elif menu == "📂 Quản lý Văn bản":
                         'file_data': file_bytes,
                         'file_name': file_upload.name,
                         'nguoi_upload': st.session_state.user_name,
-                        'thoi_gian_up': get_vn_time() # Đã dùng hàm giờ VN
+                        'thoi_gian_up': get_vn_time() 
                     }])
                     
                     with engine.begin() as conn:
@@ -1096,7 +1095,7 @@ elif menu == "📂 Quản lý Văn bản":
                     st.success("Lưu thành công!")
                     st.rerun()
 
-    # 3. DANH SÁCH VĂN BẢN
+    # 3. DANH SÁCH VĂN BẢN (ĐÃ FIX LỖI DUPLICATE KEY)
     st.write("---")
     st.subheader("🗃 Danh sách văn bản")
     engine = get_engine()
@@ -1106,7 +1105,7 @@ elif menu == "📂 Quản lý Văn bản":
         df_docs = pd.read_sql(query, engine)
         
         if not df_docs.empty:
-            for i, row in df_docs.iterrows():
+            for i, row in df_docs.iterrows(): # i là số thứ tự vòng lặp
                 with st.container(border=True):
                     c1, c2, c3 = st.columns([1.5, 4, 1.2])
                     
@@ -1130,71 +1129,12 @@ elif menu == "📂 Quản lý Văn bản":
                             if not file_q.empty:
                                 raw_data = file_q.iloc[0]['file_data']
                                 if raw_data:
-                                    st.download_button("📥", data=bytes(raw_data), file_name=row['file_name'], mime='application/pdf', key=f"dl_{row['id']}")
+                                    # SỬA Ở ĐÂY: Thêm _{i} vào key để đảm bảo duy nhất
+                                    st.download_button("📥", data=bytes(raw_data), file_name=row['file_name'], mime='application/pdf', key=f"dl_{row['id']}_{i}")
                         
                         with btn_del:
-                            if st.button("🗑️", key=f"del_{row['id']}", type="primary"):
-                                with engine.begin() as conn:
-                                    conn.exec_driver_sql(f"DELETE FROM documents WHERE id = '{row['id']}'")
-                                st.toast("Đã xóa!")
-                                st.rerun()
-        else:
-            st.info("Chưa có văn bản nào.")
-            
-    except Exception as e:
-        st.error(f"Lỗi tải danh sách: {e}")
-        
-    # 3. DANH SÁCH VĂN BẢN (ĐÃ FIX LỖI MEMORYVIEW)
-    st.write("---")
-    st.subheader("🗃 Danh sách văn bản")
-    engine = get_engine()
-    
-    try:
-        # LƯU Ý: Tuyệt đối KHÔNG lấy cột 'file_data' ở câu lệnh này
-        # Nếu lấy file_data ở đây, bảng sẽ bị lỗi hiển thị ngay lập tức
-        query = "SELECT id, so_hieu, ngay_ky, mo_ta, loai_vb, file_name, ghi_chu FROM documents ORDER BY thoi_gian_up DESC LIMIT 20"
-        df_docs = pd.read_sql(query, engine)
-        
-        if not df_docs.empty:
-            for i, row in df_docs.iterrows():
-                with st.container(border=True):
-                    c1, c2, c3 = st.columns([1.5, 4, 1.2])
-                    
-                    with c1:
-                        st.markdown(f"**{row['so_hieu']}**")
-                        st.caption(f"📅 {row['ngay_ky']}")
-                        st.caption(f"🏷️ {row['loai_vb']}")
-                    
-                    with c2:
-                        st.markdown(f"**V/v:** {row['mo_ta']}")
-                        # Hiển thị ghi chú Đội nhận
-                        if row['ghi_chu']:
-                            st.info(f"👉 **Phân bổ:** {row['ghi_chu']}")
-                        else:
-                            st.caption("_(Chung / Chưa có ghi chú)_")
-                        st.caption(f"File: {row['file_name']}")
-                    
-                    with c3:
-                        btn_dl, btn_del = st.columns(2)
-                        
-                        # Nút Tải (Lấy data riêng để tránh lỗi)
-                        with btn_dl:
-                            file_q = pd.read_sql(f"SELECT file_data FROM documents WHERE id='{row['id']}'", engine)
-                            if not file_q.empty:
-                                raw_data = file_q.iloc[0]['file_data']
-                                if raw_data:
-                                    st.download_button(
-                                        label="📥",
-                                        data=bytes(raw_data), # Ép kiểu bytes để sửa lỗi memoryview
-                                        file_name=row['file_name'],
-                                        mime='application/pdf',
-                                        key=f"dl_{row['id']}",
-                                        help="Tải về"
-                                    )
-                        
-                        # Nút Xóa
-                        with btn_del:
-                            if st.button("🗑️", key=f"del_{row['id']}", type="primary", help="Xóa"):
+                            # SỬA Ở ĐÂY: Thêm _{i} vào key
+                            if st.button("🗑️", key=f"del_{row['id']}_{i}", type="primary"):
                                 with engine.begin() as conn:
                                     conn.exec_driver_sql(f"DELETE FROM documents WHERE id = '{row['id']}'")
                                 st.toast("Đã xóa!")
@@ -1232,6 +1172,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
