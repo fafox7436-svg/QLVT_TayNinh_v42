@@ -711,6 +711,7 @@ elif menu == "📂 Quản lý Văn bản":
     
     try:
         # QUAN TRỌNG: KHÔNG SELECT CỘT 'file_data' Ở ĐÂY để tránh lỗi memoryview
+        # Chúng ta chỉ lấy metadata để hiển thị danh sách cho nhẹ
         query = "SELECT id, so_hieu, ngay_ky, mo_ta, loai_vb, file_name FROM documents ORDER BY thoi_gian_up DESC LIMIT 20"
         df_docs = pd.read_sql(query, engine)
         
@@ -783,6 +784,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
