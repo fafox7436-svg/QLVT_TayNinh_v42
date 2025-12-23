@@ -1198,6 +1198,108 @@ elif menu == "🛠️ Hiện trường (Seri)":
             
         else:
             st.info("Bạn chưa gửi yêu cầu báo hỏng nào.")
+
+# --- MENU BÁO HỎNG (ĐỘI QLĐ) ---
+elif menu == "🚨 Báo Hỏng":
+    st.header(f"🚨 Báo cáo Hư hỏng & Yêu cầu Bù hàng: {st.session_state.user_name}")
+    
+    t1, t2 = st.tabs(["✍️ Lập phiếu báo hỏng", "📋 Lịch sử đã báo"])
+    
+    # --- TAB 1: LẬP PHIẾU ---
+    with t1:
+        st.caption("Chức năng dùng để báo cáo vật tư bị lỗi/hư hỏng trong kho hoặc khi đang thi công để xin cấp bù.")
+        
+        # 1. Lấy dữ liệu kho của Đội
+        df_kho = st.session_state.inventory[st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name].copy()
+        
+        if not df_kho.empty:
+            # Thêm cột chọn
+            df_kho.insert(0, "Chọn", False)
+            
+            # Hiển thị bảng chọn thiết bị hỏng
+            st.write("👇 **Chọn thiết bị bị hỏng:**")
+            edited_bh = st.data_editor(
+                df_kho[['Chọn', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Năm_SX']],
+                column_config={
+                    "Chọn": st.column_config.CheckboxColumn("Báo hỏng?", default=False),
+                    "Mã_TB": "Model/Chủng loại"
+                },
+                use_container_width=True,
+                key="editor_bao_hong"
+            )
+            
+            st.write("---")
+            with st.form("f_bao_hong"):
+                c1, c2 = st.columns(2)
+                ly_do = c1.selectbox("Nguyên nhân hỏng", ["Lỗi kỹ thuật (NSX)", "Hư hỏng do vận chuyển", "Cháy nổ/Sự cố lưới", "Màn hình không hiển thị", "Khác"])
+                ghi_chu = c2.text_input("Ghi chú chi tiết (nếu có)")
+                
+                if st.form_submit_button("🚀 Gửi yêu cầu Bù hàng"):
+                    # Lấy danh sách thiết bị được chọn
+                    selected = edited_bh[edited_bh["Chọn"] == True]
+                    
+                    if selected.empty:
+                        st.error("❌ Bạn chưa chọn thiết bị nào để báo hỏng!")
+                    else:
+                        # 1. Cập nhật trạng thái trong kho -> "Hàng lỗi"
+                        idx_list = selected.index.tolist()
+                        st.session_state.inventory.loc[idx_list, 'Trạng_Thái_Luoi'] = "Báo hỏng/Chờ bù"
+                        st.session_state.inventory.loc[idx_list, 'Chi_Tiết_Vị_Trí'] = f"Báo hỏng: {ly_do}. {ghi_chu}"
+                        
+                        # 2. Tạo yêu cầu gửi về Admin (Bảng requests)
+                        now_str = get_vn_time()
+                        new_reqs = []
+                        
+                        for _, row in selected.iterrows():
+                            new_reqs.append({
+                                'Thời_Gian_Báo': now_str,
+                                'Đơn_Vị': st.session_state.user_name,
+                                'Loại_VT': row['Loại_VT'],
+                                'Tên_Vật_Tư': f"{row['Mã_TB']} - {row['Số_Seri']}", # Ghép tên để Admin dễ đọc
+                                'Nhà_CC': "---", # Có thể lấy từ inventory nếu cần
+                                'Chủng_Loại': row['Mã_TB'],
+                                'Số_Lượng': 1,
+                                'Lý_Do': f"{ly_do} ({ghi_chu})",
+                                'Trạng_Thái': "Chờ duyệt",
+                                'Thời_Gian_Bù': "---"
+                            })
+                        
+                        # Lưu vào session state requests
+                        df_req_new = pd.DataFrame(new_reqs)
+                        st.session_state.requests = pd.concat([st.session_state.requests, df_req_new], ignore_index=True)
+                        
+                        # Ghi nhật ký
+                        luu_nhat_ky("Báo hỏng", f"Đội {st.session_state.user_name} báo hỏng {len(selected)} thiết bị.")
+                        save_all()
+                        
+                        st.success(f"✅ Đã gửi báo hỏng {len(selected)} thiết bị. Vui lòng chờ Admin duyệt cấp bù!")
+                        st.rerun()
+        else:
+            st.info("Kho của bạn hiện đang trống, không có thiết bị để báo hỏng.")
+
+    # --- TAB 2: LỊCH SỬ ---
+    with t2:
+        st.subheader("📋 Danh sách các yêu cầu đã gửi")
+        
+        # Lọc yêu cầu của user hiện tại
+        my_req = st.session_state.requests[st.session_state.requests['Đơn_Vị'] == st.session_state.user_name].copy()
+        
+        if not my_req.empty:
+            # Sắp xếp mới nhất lên đầu
+            my_req = my_req.sort_index(ascending=False)
+            
+            # Hàm tô màu trạng thái
+            def highlight_status(val):
+                color = '#ffcdd2' if val == 'Chờ duyệt' else '#c8e6c9' # Đỏ nhạt nếu chờ, Xanh nhạt nếu xong
+                return f'background-color: {color}'
+
+            st.dataframe(
+                my_req[['Thời_Gian_Báo', 'Tên_Vật_Tư', 'Lý_Do', 'Trạng_Thái', 'Thời_Gian_Bù']]
+                .style.applymap(highlight_status, subset=['Trạng_Thái']),
+                use_container_width=True
+            )
+        else:
+            st.info("Bạn chưa có lịch sử báo hỏng nào.")
 # --- ĐỘI: GỬI YÊU CẦU TRẢ (Bổ sung ghi nhật ký) ---
 elif menu == "📦 Hoàn Trả/Bảo Hành":
     st.header(f"📦 Yêu cầu Hoàn trả / Bảo hành: {st.session_state.user_name}")
@@ -1536,6 +1638,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
