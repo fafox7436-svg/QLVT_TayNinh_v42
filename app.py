@@ -577,6 +577,152 @@ elif menu == "📥 Nhập Kho":
                 except Exception as e:
                     st.error(f"Lỗi file Excel: {e}")
 
+# --- MENU CẤP PHÁT (UPDATE: CÓ THÊM PHẦN EXCEL) ---
+elif menu == "🚚 Cấp Phát":
+    st.header("🚚 Cấp phát Vật tư cho Đội")
+    
+    t1, t2 = st.tabs(["🚀 Lệnh Cấp Phát / Điều Chuyển", "📂 Lịch sử Cấp phát"])
+    
+    # --- TAB 1: THỰC HIỆN CẤP PHÁT ---
+    with t1:
+        # Chọn chế độ nhập liệu
+        mode_cp = st.radio("Chế độ cấp phát:", ["✍️ Chọn tay (Trên lưới)", "📁 Nạp Excel (Hàng loạt)"], horizontal=True, label_visibility="collapsed", key="mode_cp_main")
+        
+        # 1. CHỌN KHO NGUỒN (CHUNG CHO CẢ 2 CHẾ ĐỘ)
+        all_kho = st.session_state.inventory['Vị_Trí_Kho'].unique()
+        def_ix = 0
+        if st.session_state.user_name in all_kho:
+            def_ix = list(all_kho).index(st.session_state.user_name)
+        elif "PC Tây Ninh - Cơ sở 1" in all_kho:
+             def_ix = list(all_kho).index("PC Tây Ninh - Cơ sở 1")
+
+        c_src, c_dst = st.columns(2)
+        kho_nguon = c_src.selectbox("Từ Kho (Nguồn):", all_kho, index=def_ix, key="src_kho_cp")
+        
+        # === CHẾ ĐỘ 1: CHỌN TAY ===
+        if mode_cp == "✍️ Chọn tay (Trên lưới)":
+            doi_nhan = c_dst.selectbox("Đến Đội (Đích):", DANH_SACH_14_DOI, key="dst_doi_cp")
+            st.divider()
+            
+            # Lọc vật tư khả dụng
+            df_avail = st.session_state.inventory[
+                (st.session_state.inventory['Vị_Trí_Kho'] == kho_nguon) & 
+                (st.session_state.inventory['Trạng_Thái_Luoi'] == "Dưới kho")
+            ]
+            
+            if not df_avail.empty:
+                col_f1, col_f2 = st.columns(2)
+                list_lvt = df_avail['Loại_VT'].unique()
+                filter_lvt = col_f1.selectbox("Lọc Loại VT:", ["Tất cả"] + list(list_lvt), key="fil_lvt_cp")
+                
+                df_view = df_avail if filter_lvt == "Tất cả" else df_avail[df_avail['Loại_VT'] == filter_lvt]
+                
+                st.info(f"💡 Kho '{kho_nguon}' có {len(df_view)} thiết bị sẵn sàng cấp.")
+                
+                with st.form("f_cap_phat_manual"):
+                    # Chọn nhiều dòng
+                    df_view.insert(0, "Chọn", False)
+                    edited_cp = st.data_editor(
+                        df_view[['Chọn', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Năm_SX']],
+                        column_config={"Chọn": st.column_config.CheckboxColumn("Cấp?", default=False)},
+                        use_container_width=True,
+                        key="editor_cp_manual"
+                    )
+                    
+                    ghi_chu_cap = st.text_input("Ghi chú cấp phát (Số Phiếu/Lệnh):")
+                    
+                    if st.form_submit_button("🚀 Xác nhận Cấp phát"):
+                        selected_indices = edited_cp[edited_cp["Chọn"] == True].index.tolist()
+                        
+                        if not selected_indices:
+                            st.warning("⚠️ Chưa chọn thiết bị nào!")
+                        else:
+                            now_str = get_vn_time()
+                            st.session_state.inventory.loc[selected_indices, 'Vị_Trí_Kho'] = doi_nhan
+                            st.session_state.inventory.loc[selected_indices, 'Thoi_Gian_Cap_Phat'] = now_str
+                            st.session_state.inventory.loc[selected_indices, 'Chi_Tiết_Vị_Trí'] = f"Nhận từ {kho_nguon}. {ghi_chu_cap}"
+                            
+                            cnt = len(selected_indices)
+                            luu_nhat_ky("Cấp phát", f"Điều chuyển {cnt} thiết bị từ {kho_nguon} sang {doi_nhan}")
+                            save_all()
+                            st.success(f"✅ Đã cấp phát thành công {cnt} thiết bị!")
+                            st.rerun()
+            else:
+                st.warning(f"Kho '{kho_nguon}' hiện không còn vật tư nào trạng thái 'Dưới kho'.")
+
+        # === CHẾ ĐỘ 2: NẠP EXCEL (PHẦN BẠN CẦN ĐÂY) ===
+        else:
+            st.info("💡 File Excel cần có cột: 'Số_Seri', 'Mã_TB' (Tùy chọn), 'Đến_Đơn_Vị', 'Ghi_Chú'")
+            
+            # Tạo file mẫu
+            mau_cp = pd.DataFrame({
+                'Số_Seri': ['123456', '789012'],
+                'Mã_TB': ['T24 - HHM11', 'T30 - CE-14'],
+                'Đến_Đơn_Vị': ['PB0601 Tân An', 'PB0602 Thủ Thừa'],
+                'Ghi_Chú': ['Cấp đợt 1', 'Cấp bổ sung']
+            })
+            st.download_button("📥 Tải file mẫu Cấp phát (.xlsx)", get_sample_excel(mau_cp), "Mau_Cap_Phat.xlsx")
+            
+            f_cp = st.file_uploader("Upload Excel Cấp phát", type=["xlsx"], key="upl_cp_excel")
+            
+            if f_cp and st.button("🚀 Thực hiện Cấp phát hàng loạt"):
+                try:
+                    df_up = pd.read_excel(f_cp)
+                    df_up.columns = [c.strip() for c in df_up.columns]
+                    
+                    if 'Số_Seri' not in df_up.columns or 'Đến_Đơn_Vị' not in df_up.columns:
+                        st.error("File thiếu cột bắt buộc: 'Số_Seri' hoặc 'Đến_Đơn_Vị'")
+                    else:
+                        count_ok = 0
+                        errors = []
+                        now_str = get_vn_time()
+                        
+                        for idx, row in df_up.iterrows():
+                            seri = str(row['Số_Seri'])
+                            dest = str(row['Đến_Đơn_Vị'])
+                            note = str(row.get('Ghi_Chú', ''))
+                            
+                            # Tìm thiết bị trong kho nguồn
+                            mask = (st.session_state.inventory['Vị_Trí_Kho'] == kho_nguon) & \
+                                   (st.session_state.inventory['Số_Seri'] == seri) & \
+                                   (st.session_state.inventory['Trạng_Thái_Luoi'] == "Dưới kho")
+                            
+                            found = st.session_state.inventory[mask].index
+                            
+                            if not found.empty:
+                                i = found[0]
+                                st.session_state.inventory.loc[i, 'Vị_Trí_Kho'] = dest
+                                st.session_state.inventory.loc[i, 'Thoi_Gian_Cap_Phat'] = now_str
+                                st.session_state.inventory.loc[i, 'Chi_Tiết_Vị_Trí'] = f"Nhận từ {kho_nguon} (Excel). {note}"
+                                count_ok += 1
+                            else:
+                                errors.append(seri)
+                        
+                        if count_ok > 0:
+                            luu_nhat_ky("Cấp phát (Excel)", f"Điều chuyển {count_ok} thiết bị từ {kho_nguon} theo danh sách Excel.")
+                            save_all()
+                            st.success(f"✅ Đã cấp phát thành công {count_ok} thiết bị!")
+                        
+                        if errors:
+                            st.warning(f"⚠️ Có {len(errors)} seri không tìm thấy trong kho '{kho_nguon}' hoặc đã cấp rồi:")
+                            st.write(errors)
+                            
+                except Exception as e:
+                    st.error(f"Lỗi đọc file Excel: {e}")
+
+    # --- TAB 2: LỊCH SỬ ---
+    with t2:
+        st.subheader("📜 Nhật ký Cấp phát gần đây")
+        df_his = st.session_state.inventory[st.session_state.inventory['Thoi_Gian_Cap_Phat'] != '---'].copy()
+        if not df_his.empty:
+            # Sắp xếp theo thời gian giảm dần (nếu có thể parse)
+            st.dataframe(
+                df_his[['Thoi_Gian_Cap_Phat', 'Vị_Trí_Kho', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Chi_Tiết_Vị_Trí']],
+                use_container_width=True
+            )
+        else:
+            st.info("Chưa có dữ liệu.")
+
 # --- ADMIN: DUYỆT BÁO HỎNG & LỊCH SỬ BÙ HÀNG ---
 elif menu == "🚨 Duyệt Báo Hỏng":
     st.header("🚨 Quản lý Duyệt Bù Hàng & Báo Hỏng")
@@ -1390,6 +1536,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
