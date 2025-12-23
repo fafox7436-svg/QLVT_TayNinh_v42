@@ -7,6 +7,41 @@ import os
 import uuid
 import re
 import pdfplumber
+# --- BỘ DANH MỤC CHỦNG LOẠI CÔNG TƠ CHUẨN (PC TÂY NINH) - ĐÃ CẬP NHẬT ---
+DM_CHUNG_LOAI_CONG_TO = {
+    "Hữu Hồng": [
+        # Nhóm HHM cũ
+        "T24 - HHM11 (PLC)", "T42 - HHM18", "T50 - HHM-18 GT",
+        "41M - HHM-38 (PLC)", "42M - HHM-38GT (PLC)",
+        # Nhóm Linkton (Gộp vào theo yêu cầu)
+        "T23 - DDS26 (RF)", "T26 - DDS26D", "T21 - DDS26D (RF)",
+        "T14 - DDZ1513",
+        "43M - DTS27-PDM 044-2015", "44M - DTS27-PDM 045-2015"
+    ],
+    "Psmart": [ # Đổi từ Star (Điện cơ) thành Psmart
+        "T51 - SF10m-10", "T49 - SF80C-10",
+        "T40 - SF80C-21", "T28 - SF80C-21",
+        "T41 - SF80m-10"
+    ],
+    "Vinasino": [
+        "T03 - VSE11-10 (PLC)", "T04 - VSE11-20 (PLC)", "T33 - VSE1T-10100",
+        "T34 - VSE1T-510", "T44 - VSE1T-510B", "T16 - VSE1T-5CT(510) (PLC)",
+        "01N - VSE3T-5 (PLC)", "02N - VSE3T-50 (PLC)", "05N - VSE3T-5B (PLC)",
+        "T43 - VSE1T-10100B", "47M - VSE3T-10100B"
+    ],
+    "Gelex/EMIC": [
+        "T30 - CE-14", "T31 - CE-14", "T53 - CE-14",
+        "T36 - CE-11mGS", "T17 - CE-14mGS", "T10 - CE-18G",
+        "45M - ME-41", "46M - ME-42",
+        "26M - PB3AABGHT-5", "28M - PB3FAAGHT-5", "29M - PB3KAAGHT-5",
+        "09N - TF100m-31", "T48 - TF10m-10", "10N - TF10m-30"
+    ],
+    "Omnisystem": [
+        "T56 - OVE-A002", "T57 - OVE-A003TT10-80",
+        "55M - OVE-B002", "56M - OVE-C001MV-63"
+    ],
+    "Khác": ["Khác"]
+}
 # --- HÀM LẤY GIỜ VIỆT NAM (DÙNG CHO TOÀN BỘ APP) ---
 def get_vn_time():
     # Lấy giờ hiện tại của server + 7 tiếng
@@ -278,61 +313,97 @@ if menu == "📊 Giám sát & Dashboard":
     else:
         st.info("Kho đang trống.")
 
+# --- MENU NHẬP KHO (UPDATE: CHỌN CHỦNG LOẠI CHUẨN) ---
 elif menu == "📥 Nhập Kho":
     st.header("Nhập Vật Tư Mới")
-    t1, t2 = st.tabs(["✍️ Nhập tay", "📁 Excel Nhập"])
+    t1, t2 = st.tabs(["✍️ Nhập tay (Chuẩn hóa)", "📁 Excel Nhập"])
     
-    # --- TAB 1: NHẬP TAY (ĐÃ SỬA LỖI LIST NHÀ CC) ---
+    # --- TAB 1: NHẬP TAY CHUẨN ---
     with t1:
-        # 1. Đưa Loại VT ra ngoài form để App cập nhật danh sách Nhà CC ngay lập tức
+        # 1. Chọn Loại VT (Công tơ, Modem...)
         lvt = st.selectbox("Chọn Loại Vật Tư", list(DANM_MUC_NCC.keys()))
         
-        # 2. Form nhập liệu (Chứa các thông tin còn lại)
+        # 2. Chọn Nhà Cung Cấp
+        # Nếu là Công tơ thì dùng danh sách các hãng công tơ, nếu khác thì dùng danh sách cũ
+        ds_ncc = list(DM_CHUNG_LOAI_CONG_TO.keys()) if lvt == "Công tơ" else DANM_MUC_NCC.get(lvt, ["Khác"])
+        ncc = st.selectbox("Nhà Cung Cấp / Hãng SX", ds_ncc)
+        
         with st.form("f_nhap"):
-            # Danh sách Nhà CC sẽ thay đổi dựa theo lvt bên trên
-            ncc = st.selectbox("Nhà Cung Cấp", DANM_MUC_NCC[lvt])
-            
+            # 3. Chọn Model/Chủng loại (Tự động nhảy theo NCC)
+            if lvt == "Công tơ" and ncc in DM_CHUNG_LOAI_CONG_TO:
+                # Nếu là công tơ -> Hiện danh sách chuẩn T24, T42...
+                mod_select = st.selectbox("Mã & Tên Chủng Loại", DM_CHUNG_LOAI_CONG_TO[ncc])
+                # Tách lấy phần tên sau dấu gạch ngang để lưu cho gọn, hoặc lưu cả chuỗi tùy bạn
+                # Ở đây tôi lưu cả chuỗi "T24 - HHM11" để dễ quản lý
+                mod = mod_select 
+            else:
+                # Nếu là vật tư khác -> Nhập tay như cũ
+                mod = st.text_input("Model/Mã thiết bị (Nhập tay)", placeholder="Vd: Modem 3G...")
+
             c1, c2 = st.columns(2)
             with c1:
                 ng = st.selectbox("Nguồn nhập", NGUON_NHAP_NGOAI)
                 kh = st.selectbox("Nhập vào kho", CO_SO)
             with c2:
-                mod = st.text_input("Model/Mã thiết bị")
-                sl = st.number_input("Số lượng", min_value=1, step=1)
+                sl = st.number_input("Số lượng", min_value=1, step=1, value=10)
+                # Tự động tạo mã lô nhập
+                lot_id = f"IMP-{datetime.datetime.now().strftime('%d%m')}"
+                st.caption(f"Lô: {lot_id}")
                 
             if st.form_submit_button("🚀 Gửi xác nhận"):
                 now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                 new_rows = []
-                for _ in range(int(sl)):
+                for i in range(int(sl)):
                     new_rows.append({
                         'ID_He_Thong': f"TN-{uuid.uuid4().hex[:8].upper()}", 
-                        'Năm_SX': NAM_HIEN_TAI, 'Loại_VT': lvt, 'Mã_TB': mod, 'Số_Seri': 'Chưa nhập', 
-                        'Nhà_CC': ncc, 'Nguồn_Nhap': ng, 'Vị_Trí_Kho': kh, 'Trạng_Thái_Luoi': 'Dưới kho', 
-                        'Mục_Đích': 'Dự phòng tại kho', 'Chi_Tiết_Vị_Trí': '---',
-                        'Thoi_Gian_Tao': now, 'Thoi_Gian_Cap_Phat': '---'
+                        'Năm_SX': NAM_HIEN_TAI, 
+                        'Loại_VT': lvt, 
+                        'Mã_TB': mod, # Lưu giá trị chuẩn (Vd: T24 - HHM11)
+                        'Số_Seri': 'Chưa nhập', 
+                        'Nhà_CC': ncc, 
+                        'Nguồn_Nhap': ng, 
+                        'Vị_Trí_Kho': kh, 
+                        'Trạng_Thái_Luoi': 'Dưới kho', 
+                        'Mục_Đích': 'Dự phòng tại kho', 
+                        'Chi_Tiết_Vị_Trí': f'Lô {lot_id}',
+                        'Thoi_Gian_Tao': now, 
+                        'Thoi_Gian_Cap_Phat': '---'
                     })
                 confirm_dialog("nhap", pd.DataFrame(new_rows))
+
+    # --- TAB 2: NHẬP EXCEL (GIỮ NGUYÊN) ---
     with t2:
+        st.info("💡 Mẹo: Trong file Excel, cột 'Mã_TB' bạn cũng nên điền theo chuẩn (Vd: T24 - HHM11) để đồng bộ.")
         mau_nhap = pd.DataFrame(columns=['Số_Lượng', 'Năm_SX', 'Loại_VT', 'Mã_TB', 'Nhà_CC', 'Nguồn_Nhap'])
-        mau_nhap.loc[0] = [10, 2025, "Công tơ", "VSE11", "Vinasino", "EVNSPC"]
-        st.download_button("📥 Tải file mẫu Nhập (.xlsx)", get_sample_excel(mau_nhap), "Mau_Nhap_Kho.xlsx")
+        mau_nhap.loc[0] = [10, 2025, "Công tơ", "T24 - HHM11 (PLC)", "Hữu Hồng", "EVNSPC"]
+        st.download_button("📥 Tải file mẫu Nhập (.xlsx)", get_sample_excel(mau_nhap), "Mau_Nhap_Kho_Chuan.xlsx")
         
         f = st.file_uploader("Nạp Excel Nhập", type=["xlsx"])
         if f and st.button("🚀 Nạp Excel"):
-            df_ex = pd.read_excel(f)
-            now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            ex_data = []
-            for _, r in df_ex.iterrows():
-                for i in range(int(r['Số_Lượng'])):
-                    ex_data.append({
-                        'ID_He_Thong': f"TN-EX-{uuid.uuid4().hex[:6].upper()}-{i}", 
-                        'Năm_SX': r['Năm_SX'], 'Loại_VT': str(r['Loại_VT']), 'Mã_TB': str(r['Mã_TB']), 
-                        'Số_Seri': 'Chưa nhập', 'Nhà_CC': r['Nhà_CC'], 'Nguồn_Nhap': r['Nguồn_Nhap'], 
-                        'Vị_Trí_Kho': CO_SO[0], 'Trạng_Thái_Luoi': 'Dưới kho', 
-                        'Mục_Đích': 'Dự phòng tại kho', 'Chi_Tiết_Vị_Trí': '---',
-                        'Thoi_Gian_Tao': now, 'Thoi_Gian_Cap_Phat': '---'
-                    })
-            confirm_dialog("nhap", pd.DataFrame(ex_data))
+            try:
+                df_ex = pd.read_excel(f)
+                now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                ex_data = []
+                for _, r in df_ex.iterrows():
+                    for i in range(int(r['Số_Lượng'])):
+                        ex_data.append({
+                            'ID_He_Thong': f"TN-EX-{uuid.uuid4().hex[:6].upper()}-{i}", 
+                            'Năm_SX': r['Năm_SX'], 
+                            'Loại_VT': str(r['Loại_VT']), 
+                            'Mã_TB': str(r['Mã_TB']), 
+                            'Số_Seri': 'Chưa nhập', 
+                            'Nhà_CC': r['Nhà_CC'], 
+                            'Nguồn_Nhap': r['Nguồn_Nhap'], 
+                            'Vị_Trí_Kho': CO_SO[0], 
+                            'Trạng_Thái_Luoi': 'Dưới kho', 
+                            'Mục_Đích': 'Dự phòng tại kho', 
+                            'Chi_Tiết_Vị_Trí': '---',
+                            'Thoi_Gian_Tao': now, 
+                            'Thoi_Gian_Cap_Phat': '---'
+                        })
+                confirm_dialog("nhap", pd.DataFrame(ex_data))
+            except Exception as e:
+                st.error(f"Lỗi đọc file Excel: {e}")
 
 elif menu == "🚚 Cấp Phát":
     st.header("Cấp Phát Về Đội")
@@ -491,12 +562,11 @@ elif menu == "🛠️ Hiện trường (Seri)":
         else:
             st.info("Kho đội đang trống.")
 
-# --- TAB 2: QUẢN LÝ LẮP ĐẶT (CÓ THÊM EXCEL) ---
+# --- TAB 2: QUẢN LÝ LẮP ĐẶT (UPDATE: CÓ CHỌN MÃ CHÌ THÔNG MINH) ---
     with t2:
-        # Chia làm 2 chế độ: Nhập tay (Lẻ) và Excel (Hàng loạt)
         mode_t2 = st.radio("Chế độ nhập liệu:", ["✍️ Nhập thủ công (Từng cái)", "📁 Nạp Excel (Hàng loạt)"], horizontal=True, label_visibility="collapsed")
         
-        # === PHẦN 1: NHẬP THỦ CÔNG (Code cũ) ===
+# === PHẦN 1: NHẬP THỦ CÔNG ===
         if mode_t2 == "✍️ Nhập thủ công (Từng cái)":
             c_mode, c_lvt = st.columns([1.5, 1])
             with c_mode:
@@ -520,8 +590,50 @@ elif menu == "🛠️ Hiện trường (Seri)":
                 seri_chon = st.selectbox("Chọn Số Seri lắp", seris if len(seris)>0 else ["(Hết hàng)"])
 
             st.write("---")
+            
+            # --- FORM NHẬP LIỆU CHÍNH ---
             with st.form("f_thuc_hien_ht"):
-                st.subheader(f"📝 Phiếu thi công: {model_chon} - {seri_chon}")
+                st.subheader(f"📝 Phiếu thi công: {model_chon}")
+                
+                # --- [CODE BẠN HỎI NẰM Ở ĐÂY] ---
+                # LOGIC GỢI Ý MÃ CHÌ (ĐÃ CẬP NHẬT PSMART & LINKTON)
+                goi_y_chi = ["VN/N128_LA"] # Mặc định
+                model_upper = str(model_chon).upper()
+                
+                # 1. Hữu Hồng (Bao gồm cả Linkton: DDS, DTS, DDZ...)
+                if any(x in model_upper for x in ["HHM", "DDS", "DTS", "DDZ"]):
+                    goi_y_chi = ["VN/N309_HHM", "VN/N128_LA", "VN/N139_TN"]
+                
+                # 2. Vinasino
+                elif "VSE" in model_upper:
+                    goi_y_chi = ["VN/N306_VSE1", "VN/N128_LA"]
+                
+                # 3. Gelex/EMIC
+                elif any(x in model_upper for x in ["CE-", "ME-", "PB", "TF"]):
+                    goi_y_chi = ["VN/N52", "VN/N128_LA", "VN/N370"]
+                
+                # 4. Omnisystem
+                elif "OVE" in model_upper:
+                    goi_y_chi = ["VN/N224_3", "VN/N224_4"]
+                
+                # 5. Psmart (Mã SF...)
+                elif "SF" in model_upper:
+                    goi_y_chi = ["VN/N370", "VN/N128_LA", "VN/N264_LA"]
+                
+                goi_y_chi.append("✍️ Nhập tay khác...")
+                
+                c_chi_1, c_chi_2 = st.columns(2)
+                with c_chi_1:
+                    chon_chi = st.selectbox("Mã chì kiểm định (Gợi ý)", goi_y_chi)
+                with c_chi_2:
+                    if chon_chi == "✍️ Nhập tay khác...":
+                        ma_chi_final = st.text_input("Nhập mã chì thực tế", placeholder="Vd: VN/N...")
+                    else:
+                        st.text_input("Mã chì xác nhận", value=chon_chi, disabled=True)
+                        ma_chi_final = chon_chi
+                # ----------------------------------------
+
+                # --- PHẦN TIẾP THEO CỦA FORM (KHÔNG ĐƯỢC THIẾU) ---
                 c_kh_1, c_kh_2 = st.columns(2)
                 kh_name = c_kh_1.text_input("Tên Khách hàng / Mã KH")
                 dia_chi = c_kh_2.text_input("Địa chỉ lắp đặt")
@@ -536,18 +648,20 @@ elif menu == "🛠️ Hiện trường (Seri)":
                     old_idx = rc2.number_input("Chỉ số chốt", min_value=0.0)
                     ly_do = st.selectbox("Lý do thay", ["Thay định kỳ", "Thay đồng bộ", "Thay hư hỏng", "Khác"])
                 
+                # NÚT GỬI (QUAN TRỌNG)
                 if st.form_submit_button("🚀 Cập nhật"):
                     if seri_chon == "(Hết hàng)" or not seri_chon:
                         st.error("❌ Chưa chọn thiết bị mới!")
                     elif is_thay_the and not old_seri:
                         st.error("❌ Thiếu Seri cũ!")
+                    elif not ma_chi_final:
+                        st.error("❌ Chưa nhập mã chì!")
                     else:
-                        # Logic xử lý (Giống cũ)
                         idx_new = st.session_state.inventory[(st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) & (st.session_state.inventory['Số_Seri'] == seri_chon)].index
                         st.session_state.inventory.loc[idx_new, 'Trạng_Thái_Luoi'] = "Đã đưa lên lưới"
                         st.session_state.inventory.loc[idx_new, 'Mục_Đích'] = f"KH: {kh_name}"
                         
-                        detail = f"Đ/c: {dia_chi}. " + (f"Thay cho: {old_seri} ({ly_do})" if is_thay_the else "Lắp mới PTKH")
+                        detail = f"Đ/c: {dia_chi}. [Chì: {ma_chi_final}]. " + (f"Thay cho: {old_seri} ({ly_do})" if is_thay_the else "Lắp mới PTKH")
                         st.session_state.inventory.loc[idx_new, 'Chi_Tiết_Vị_Trí'] = detail
                         
                         if is_thay_the:
@@ -556,9 +670,9 @@ elif menu == "🛠️ Hiện trường (Seri)":
                                 'ID_He_Thong': f"TH-{uuid.uuid4().hex[:8].upper()}", 'Năm_SX': "Thu hồi", 'Loại_VT': old_lvt, 'Mã_TB': old_model, 'Số_Seri': old_seri, 'Nhà_CC': "Lưới thu hồi", 'Nguồn_Nhap': f"KH: {kh_name}", 'Vị_Trí_Kho': st.session_state.user_name, 'Trạng_Thái_Luoi': "Vật tư thu hồi", 'Mục_Đích': "Chờ kiểm định", 'Chi_Tiết_Vị_Trí': f"Hạn trả: {deadline} (Chỉ số: {old_idx}). Lý do: {ly_do}", 'Thoi_Gian_Tao': datetime.datetime.now().strftime("%d/%m/%Y %H:%M"), 'Thoi_Gian_Cap_Phat': '---'
                             }])
                             st.session_state.inventory = pd.concat([st.session_state.inventory, thu_hoi_row], ignore_index=True)
-                            luu_nhat_ky("Thay thế", f"Lắp {seri_chon}, Thu hồi {old_seri}")
+                            luu_nhat_ky("Thay thế", f"Lắp {seri_chon} (Chì: {ma_chi_final}), Thu hồi {old_seri}")
                         else:
-                            luu_nhat_ky("Lắp mới", f"Lắp mới {seri_chon} cho {kh_name}")
+                            luu_nhat_ky("Lắp mới", f"Lắp mới {seri_chon} (Chì: {ma_chi_final}) cho {kh_name}")
                         
                         save_all()
                         st.success("✅ Thành công!")
@@ -566,21 +680,11 @@ elif menu == "🛠️ Hiện trường (Seri)":
 
         # === PHẦN 2: NẠP EXCEL (TÍNH NĂNG MỚI) ===
         else:
-            st.info("💡 File Excel cần có cột 'Nghiệp_Vụ' (điền 'Lắp mới' hoặc 'Thay thế'). Hệ thống tự động xử lý và tính hạn thu hồi.")
+           st.info("💡 Chế độ Excel dùng để nạp nhanh hàng loạt.")
             
             # Tạo file mẫu thông minh
-            mau_ht = pd.DataFrame({
-                'Nghiệp_Vụ': ['Lắp mới', 'Thay thế'],
-                'Seri_Mới_Lắp': ['123456', '789012'],
-                'Tên_KH': ['Nguyễn Văn A', 'Lê Thị B'],
-                'Địa_Chỉ': ['Số 1 Đường A', 'Số 2 Đường B'],
-                'Seri_Cũ_Thu_Hồi': ['', 'OLD-999'],
-                'Model_Cũ': ['', 'VSE11-2015'],
-                'Chỉ_Số_Chốt': ['', 15430],
-                'Lý_Do_Thay': ['', 'Thay định kỳ'],
-                'Loại_VT_Cũ': ['', 'Công tơ']
-            })
-            st.download_button("📥 Tải file mẫu Hiện trường (.xlsx)", get_sample_excel(mau_ht), "Mau_Hien_Truong.xlsx")
+            mau_ht = pd.DataFrame({'Nghiệp_Vụ': ['Lắp mới'], 'Seri_Mới': ['123'], 'Mã_Chì': ['VN/N...'], 'Tên_KH': ['A'], 'Địa_Chỉ': ['B']})
+            st.download_button("📥 Tải mẫu Excel", get_sample_excel(mau_ht), "Mau_HT.xlsx")
             
             f_ht = st.file_uploader("Upload Excel", type=["xlsx"])
             if f_ht and st.button("🚀 Xử lý hàng loạt"):
@@ -1157,6 +1261,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
