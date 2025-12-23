@@ -826,7 +826,7 @@ elif menu == "🛠️ Hiện trường (Seri)":
 
 # --- TAB 2: QUẢN LÝ LẮP ĐẶT (FULL CODE: ĐÃ CĂN LỀ CHUẨN) ---
     with t2:
-        mode_t2 = st.radio("Chế độ nhập liệu:", ["✍️ Nhập thủ công (Từng cái)", "📁 Nạp Excel (Hàng loạt)"], horizontal=True, label_visibility="collapsed")
+        mode_t2 = st.radio("Chế độ nhập liệu:", ["✍️ Nhập thủ công (Từng cái)", "📁 Nạp Excel (Hàng loạt)"], horizontal=True, label_visibility="collapsed", key="mode_nhap_lieu_ht")
         
         # === PHẦN 1: NHẬP THỦ CÔNG ===
         if mode_t2 == "✍️ Nhập thủ công (Từng cái)":
@@ -1456,6 +1456,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
