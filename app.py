@@ -287,7 +287,8 @@ if st.session_state.user_role == "admin":
         "🚚 Cấp Phát", 
         "🚨 Duyệt Báo Hỏng", 
         "🔄 Kho Bảo Hành/Hoàn Trả",
-        "📜 Nhật ký Hoạt động"  # <--- BỔ SUNG DÒNG NÀY
+        "📜 Nhật ký Hoạt động",
+        "💾 Quản trị Dữ liệu" # <--- BỔ SUNG DÒNG NÀY
     ])
 else:
     menu = st.sidebar.radio("ĐỘI QLĐ", ["🛠️ Hiện trường (Seri)", "🚨 Báo Hỏng", "📦 Hoàn Trả/Bảo Hành"])
@@ -1638,6 +1639,100 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
+# --- MENU QUẢN TRỊ DỮ LIỆU (BACKUP & RESTORE) ---
+elif menu == "💾 Quản trị Dữ liệu":
+    st.header("💾 Trung tâm Sao lưu & Khôi phục Dữ liệu")
+    
+    t1, t2 = st.tabs(["📥 Sao lưu (Backup)", "🛠️ Cấu hình & Tiện ích"])
+    
+    # --- TAB 1: SAO LƯU DỮ LIỆU ---
+    with t1:
+        st.info("💡 Chức năng này giúp bạn tải toàn bộ dữ liệu hiện tại về máy tính để lưu trữ.")
+        
+        c1, c2, c3 = st.columns(3)
+        
+        # 1. Tải Dữ liệu KHO (Inventory)
+        with c1:
+            st.subheader("1. Dữ liệu Kho")
+            st.caption(f"Tổng: {len(st.session_state.inventory)} dòng")
+            st.download_button(
+                "📥 Tải File Kho (.xlsx)",
+                get_sample_excel(st.session_state.inventory),
+                f"Backup_KHO_{datetime.date.today()}.xlsx",
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                use_container_width=True
+            )
+
+        # 2. Tải Dữ liệu YÊU CẦU (Requests)
+        with c2:
+            st.subheader("2. Yêu cầu/Báo hỏng")
+            st.caption(f"Tổng: {len(st.session_state.requests)} dòng")
+            st.download_button(
+                "📥 Tải File Requests (.xlsx)",
+                get_sample_excel(st.session_state.requests),
+                f"Backup_REQUESTS_{datetime.date.today()}.xlsx",
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                use_container_width=True
+            )
+
+        # 3. Tải NHẬT KÝ (Logs) - Phải query từ SQL vì log không lưu hết vào session
+        with c3:
+            st.subheader("3. Nhật ký Hoạt động")
+            try:
+                engine = get_engine()
+                df_log_full = pd.read_sql("SELECT * FROM nhat_ky_he_thong ORDER BY id DESC", engine)
+                st.caption(f"Tổng: {len(df_log_full)} dòng")
+                st.download_button(
+                    "📥 Tải Full Log (.xlsx)",
+                    get_sample_excel(df_log_full),
+                    f"Backup_LOGS_{datetime.date.today()}.xlsx",
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    use_container_width=True
+                )
+            except:
+                st.error("Không kết nối được bảng Log.")
+
+        st.divider()
+        
+        # --- NÚT TẢI ALL-IN-ONE (SIÊU TIỆN LỢI) ---
+        st.subheader("📦 Tải trọn gói (All-in-One)")
+        st.write("Tải 1 file Excel duy nhất chứa cả 3 sheet: Inventory, Requests và Logs.")
+        
+        if st.button("🚀 Tạo file Backup Tổng thể"):
+            try:
+                # Tạo file Excel nhiều sheet trong bộ nhớ
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    st.session_state.inventory.to_excel(writer, sheet_name='INVENTORY', index=False)
+                    st.session_state.requests.to_excel(writer, sheet_name='REQUESTS', index=False)
+                    # Lấy log
+                    try:
+                        engine = get_engine()
+                        df_log_full = pd.read_sql("SELECT * FROM nhat_ky_he_thong", engine)
+                        df_log_full.to_excel(writer, sheet_name='LOGS', index=False)
+                    except:
+                        pd.DataFrame({'Lỗi': ['Không tải được log']}).to_excel(writer, sheet_name='LOGS')
+                
+                st.download_button(
+                    "📥 Bấm để tải File Backup Tổng thể (.xlsx)",
+                    data=output.getvalue(),
+                    file_name=f"FULL_BACKUP_QLVT_{datetime.date.today()}.xlsx",
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    type="primary"
+                )
+            except Exception as e:
+                st.error(f"Lỗi tạo file backup: {e}")
+
+    # --- TAB 2: TIỆN ÍCH KHÁC ---
+    with t2:
+        st.write("🔧 **Công cụ sửa lỗi nhanh:**")
+        if st.button("🔄 Làm mới bộ nhớ đệm (Reload Data)"):
+            st.cache_data.clear()
+            st.session_state.inventory, st.session_state.requests = load_data()
+            st.success("Đã tải lại dữ liệu mới nhất từ Server!")
+            st.rerun()
+
 
 
 
