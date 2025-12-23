@@ -824,15 +824,16 @@ elif menu == "🛠️ Hiện trường (Seri)":
                         st.success("✅ Thành công!")
                         st.rerun()
 
-# --- TAB 2: QUẢN LÝ LẮP ĐẶT (FULL CODE: ĐÃ CĂN LỀ CHUẨN) ---
+# --- TAB 2: QUẢN LÝ LẮP ĐẶT (ĐÃ FIX LỖI DUPLICATE KEY) ---
     with t2:
-        mode_t2 = st.radio("Chế độ nhập liệu:", ["✍️ Nhập thủ công (Từng cái)", "📁 Nạp Excel (Hàng loạt)"], horizontal=True, label_visibility="collapsed", key="mode_nhap_lieu_ht")
+        # Thêm key="tab2_mode" để chắc chắn không bị lỗi trùng lặp
+        mode_t2 = st.radio("Chế độ nhập liệu:", ["✍️ Nhập thủ công (Từng cái)", "📁 Nạp Excel (Hàng loạt)"], horizontal=True, label_visibility="collapsed", key="tab2_mode")
         
         # === PHẦN 1: NHẬP THỦ CÔNG ===
         if mode_t2 == "✍️ Nhập thủ công (Từng cái)":
             c_mode, c_lvt = st.columns([1.5, 1])
             with c_mode:
-                nghiep_vu = st.radio("Nghiệp vụ:", ["Lắp mới (Phát triển KH)", "Thay thế (Định kỳ/Đồng bộ/Sự cố)"], horizontal=True)
+                nghiep_vu = st.radio("Nghiệp vụ:", ["Lắp mới (Phát triển KH)", "Thay thế (Định kỳ/Đồng bộ/Sự cố)"], horizontal=True, key="nv_radio")
                 is_thay_the = "Thay thế" in nghiep_vu
             
             with c_lvt:
@@ -841,15 +842,15 @@ elif menu == "🛠️ Hiện trường (Seri)":
                     (st.session_state.inventory['Trạng_Thái_Luoi'] == "Dưới kho")
                 ]
                 lvt_list = df_kho_doi['Loại_VT'].unique()
-                lvt_chon = st.selectbox("Loại thiết bị lắp", lvt_list if len(lvt_list)>0 else ["(Kho trống)"])
+                lvt_chon = st.selectbox("Loại thiết bị lắp", lvt_list if len(lvt_list)>0 else ["(Kho trống)"], key="slb_lvt")
                 
             c3, c4 = st.columns(2)
             with c3:
                 models = df_kho_doi[df_kho_doi['Loại_VT'] == lvt_chon]['Mã_TB'].unique() if len(lvt_list)>0 else []
-                model_chon = st.selectbox("Chọn Model", models if len(models)>0 else ["(Hết hàng)"])
+                model_chon = st.selectbox("Chọn Model", models if len(models)>0 else ["(Hết hàng)"], key="slb_model")
             with c4:
                 seris = df_kho_doi[(df_kho_doi['Mã_TB'] == model_chon)]['Số_Seri'].unique() if model_chon != "(Hết hàng)" else []
-                seri_chon = st.selectbox("Chọn Số Seri lắp", seris if len(seris)>0 else ["(Hết hàng)"])
+                seri_chon = st.selectbox("Chọn Số Seri lắp", seris if len(seris)>0 else ["(Hết hàng)"], key="slb_seri")
 
             st.write("---")
             
@@ -926,11 +927,10 @@ elif menu == "🛠️ Hiện trường (Seri)":
                         st.success("✅ Thành công!")
                         st.rerun()
 
-        # === PHẦN 2: NẠP EXCEL (DÒNG NÀY PHẢI THẲNG HÀNG VỚI IF Ở TRÊN) ===
+        # === PHẦN 2: NẠP EXCEL ===
         else:
             st.info("💡 File Excel cần có cột 'Nghiệp_Vụ' (điền 'Lắp mới' hoặc 'Thay thế'). Hệ thống tự động xử lý và tính hạn thu hồi.")
             
-            # FILE MẪU EXCEL (ĐÃ SỬA LẠI ĐỂ KHÔNG BỊ LỖI THỤT DÒNG)
             mau_ht = pd.DataFrame({
                 'Nghiệp_Vụ': ['Lắp mới', 'Thay thế'],
                 'Seri_Mới_Lắp': ['123456', '789012'],
@@ -945,8 +945,8 @@ elif menu == "🛠️ Hiện trường (Seri)":
             })
             st.download_button("📥 Tải file mẫu Hiện trường (.xlsx)", get_sample_excel(mau_ht), "Mau_Hien_Truong_v2.xlsx")
             
-            f_ht = st.file_uploader("Upload Excel", type=["xlsx"])
-            if f_ht and st.button("🚀 Xử lý hàng loạt"):
+            f_ht = st.file_uploader("Upload Excel", type=["xlsx"], key="upl_excel_ht")
+            if f_ht and st.button("🚀 Xử lý hàng loạt", key="btn_xl_excel"):
                 try:
                     df_up = pd.read_excel(f_ht)
                     df_up.columns = [c.strip() for c in df_up.columns]
@@ -1018,6 +1018,7 @@ elif menu == "🛠️ Hiện trường (Seri)":
                         
                 except Exception as e:
                     st.error(f"Lỗi file Excel: {e}")
+                    
 # --- ĐỘI: BÁO HỎNG & THEO DÕI (CÓ THÊM BẢNG THEO DÕI) ---
 elif menu == "🚨 Báo Hỏng":
     st.header("🚨 Báo Hỏng & Theo Dõi Bù Hàng")
@@ -1456,6 +1457,7 @@ elif menu == "📜 Nhật ký Hoạt động":
             st.info("Chưa có nhật ký nào.")
     except Exception as e:
         st.error(f"Lỗi: Chưa tạo bảng 'nhat_ky_he_thong' trên Supabase hoặc lỗi kết nối. ({e})")
+
 
 
 
