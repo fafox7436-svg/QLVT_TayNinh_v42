@@ -823,17 +823,18 @@ elif menu == "🚨 Duyệt Báo Hỏng":
         else:
             st.info("Chưa có dữ liệu lịch sử bù hàng.")
 
-# --- MENU HIỆN TRƯỜNG (FIX: DÙNG ID ĐỂ CẬP NHẬT SỐ SERI) ---
+# --- MENU HIỆN TRƯỜNG (CẬP NHẬT TÊN TAB 2: KẾ HOẠCH SỬ DỤNG) ---
 elif menu == "🛠️ Hiện trường (Seri)":
     st.header(f"🛠️ Quản lý Hiện trường: {st.session_state.user_name}")
     
-    t1, t2, t3 = st.tabs(["✍️ Cập nhật (Trạng thái/Seri)", "🔄 Thay thế & Thu hồi", "⚠️ Kho Thu hồi"])
+    # Đổi tên Tab 2 thành "Kế hoạch sử dụng"
+    t1, t2, t3 = st.tabs(["✍️ Cập nhật (Trạng thái/Seri)", "🗓️ Kế hoạch sử dụng", "⚠️ Kho Thu hồi"])
     
-    # --- TAB 1: CẬP NHẬT TRẠNG THÁI & SỐ SERI ---
+    # --- TAB 1: CẬP NHẬT TRẠNG THÁI & SỐ SERI (LOGIC ID) ---
     with t1:
         st.caption("Chức năng: Cập nhật Trạng thái hoặc **ĐIỀN SỐ SERI** cho các thiết bị 'Chưa nhập' (Dựa vào ID).")
         
-        mode_t1 = st.radio("Chọn cách làm:", ["✍️ Sửa trực tiếp", "📁 Nạp Excel (Cập nhật theo ID)"], horizontal=True, label_visibility="collapsed", key="mode_ht_final_fix_seri")
+        mode_t1 = st.radio("Chọn cách làm:", ["✍️ Sửa trực tiếp", "📁 Nạp Excel (Cập nhật theo ID)"], horizontal=True, label_visibility="collapsed", key="mode_ht_tab1_update")
         
         # === CHẾ ĐỘ 1: SỬA TRỰC TIẾP ===
         if mode_t1 == "✍️ Sửa trực tiếp":
@@ -846,7 +847,7 @@ elif menu == "🛠️ Hiện trường (Seri)":
                     df_display[['ID_He_Thong', 'Loại_VT', 'Mã_TB', 'Số_Seri', 'Trạng_Thái_Luoi', 'Mục_Đích', 'Chi_Tiết_Vị_Trí']],
                     column_config={
                         "ID_He_Thong": st.column_config.TextColumn("ID (Khóa chính)", disabled=True),
-                        "Số_Seri": st.column_config.TextColumn("Số Seri (Sửa được)"), # Cho phép sửa
+                        "Số_Seri": st.column_config.TextColumn("Số Seri (Sửa được)"), 
                         "Trạng_Thái_Luoi": st.column_config.SelectboxColumn("TT", options=TRANG_THAI_LIST),
                     }, 
                     disabled=['ID_He_Thong', 'Loại_VT', 'Mã_TB'], 
@@ -861,13 +862,13 @@ elif menu == "🛠️ Hiện trường (Seri)":
         else:
             st.info("💡 Cách dùng: Tải file về (có cột ID và Seri trống) -> Điền Seri vào Excel -> Upload lên để cập nhật.")
             
-            # 1. Tải file danh sách (Bắt buộc phải có cột ID_He_Thong)
+            # Tải file danh sách (Bắt buộc phải có cột ID_He_Thong)
             df_my_stock = st.session_state.inventory[st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name].copy()
             if not df_my_stock.empty:
                 mau_real = df_my_stock[['ID_He_Thong', 'Số_Seri', 'Mã_TB', 'Loại_VT', 'Trạng_Thái_Luoi', 'Mục_Đích']].copy()
                 st.download_button(f"📥 Tải danh sách ID (.xlsx)", get_sample_excel(mau_real), f"Update_Seri_{st.session_state.user_name}.xlsx")
 
-            # 2. Upload file
+            # Upload file
             f_up = st.file_uploader("Upload Excel", type=["xlsx"], key="upl_update_seri_id")
             
             if f_up:
@@ -891,11 +892,8 @@ elif menu == "🛠️ Hiện trường (Seri)":
                                 target_id = str(row[col_id]).strip()
                                 new_seri = str(row[col_seri]).strip().replace(".0", "")
                                 
-                                # Nếu seri trống hoặc là nan thì bỏ qua, không cập nhật
-                                if not new_seri or new_seri.lower() == 'nan':
-                                    continue
+                                if not new_seri or new_seri.lower() == 'nan': continue
 
-                                # Tìm ID trong kho user
                                 mask = (st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) & \
                                        (st.session_state.inventory['ID_He_Thong'] == target_id)
                                 found_idx = st.session_state.inventory[mask].index
@@ -903,24 +901,19 @@ elif menu == "🛠️ Hiện trường (Seri)":
                                 if not found_idx.empty:
                                     i = found_idx[0]
                                     old_seri = str(st.session_state.inventory.loc[i, 'Số_Seri'])
-                                    
                                     changes = []
                                     
-                                    # LOGIC QUAN TRỌNG: LUÔN CẬP NHẬT SERI NẾU KHÁC NHAU
                                     if new_seri != old_seri:
                                         st.session_state.inventory.loc[i, 'Số_Seri'] = new_seri
                                         changes.append(f"Seri: {old_seri} -> {new_seri}")
                                     
-                                    # Cập nhật trạng thái nếu có
                                     if col_tt and str(row[col_tt]) != 'nan':
                                          st.session_state.inventory.loc[i, 'Trạng_Thái_Luoi'] = str(row[col_tt])
 
                                     if changes:
                                         logs.append({"ID": target_id, "Chi tiết": ", ".join(changes)})
                                         count_ok += 1
-                                else:
-                                    pass # Không tìm thấy ID thì thôi
-                            
+                                
                             if count_ok > 0:
                                 luu_nhat_ky("Cập nhật Seri (Excel)", f"Đội {st.session_state.user_name} cập nhật seri cho {count_ok} thiết bị.")
                                 save_all()
@@ -928,13 +921,14 @@ elif menu == "🛠️ Hiện trường (Seri)":
                                 st.dataframe(pd.DataFrame(logs), use_container_width=True)
                                 st.cache_data.clear()
                             else:
-                                st.warning("⚠️ Không có dữ liệu nào thay đổi (Hoặc ID không khớp).")
+                                st.warning("⚠️ Không có dữ liệu nào thay đổi.")
 
                 except Exception as e:
                     st.error(f"Lỗi: {e}")
-                    
-# --- TAB 2: QUẢN LÝ LẮP ĐẶT (UPDATE: THÊM CHỌN TÍNH CHẤT TRẠM TCD/TCC) ---
+
+    # --- TAB 2: KẾ HOẠCH SỬ DỤNG (LẮP MỚI / THAY THẾ) ---
     with t2:
+        st.caption("Thực hiện các nghiệp vụ: Phát triển khách hàng mới hoặc Thay thế định kỳ/sự cố.")
         mode_t2 = st.radio("Chế độ nhập liệu:", ["✍️ Nhập thủ công (Từng cái)", "📁 Nạp Excel (Hàng loạt)"], horizontal=True, label_visibility="collapsed", key="radio_mode_v5")
         
         # === PHẦN 1: NHẬP THỦ CÔNG ===
@@ -1031,8 +1025,6 @@ elif menu == "🛠️ Hiện trường (Seri)":
                         # 1. Update Inventory
                         idx_new = st.session_state.inventory[(st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) & (st.session_state.inventory['Số_Seri'] == seri_chon)].index
                         st.session_state.inventory.loc[idx_new, 'Trạng_Thái_Luoi'] = "Đã đưa lên lưới"
-                        
-                        # --- LOGIC MỤC ĐÍCH MỚI: TÍNH CHẤT + TÊN KH ---
                         st.session_state.inventory.loc[idx_new, 'Mục_Đích'] = f"{tinh_chat_tram} - {kh_name}"
                         
                         detail_info = f"Đ/c: {dia_chi}. [Chì: {ma_chi_final}]. " + (f"Thay cho: {old_seri} ({ly_do})" if is_thay_the else "Lắp mới PTKH")
@@ -1053,110 +1045,6 @@ elif menu == "🛠️ Hiện trường (Seri)":
                         st.success(f"✅ Đã lắp đặt: {seri_chon} | Mục đích: {tinh_chat_tram} - {kh_name}")
                         st.balloons()
                         st.rerun()
-        # === PHẦN 2: NẠP EXCEL (LOGIC MỚI: ÉP KIỂU STRING) ===
-        else:
-            st.info("💡 Tải danh sách thiết bị 'DƯỚI KHO' về để điền thông tin lắp đặt.")
-            
-            # Lấy list hàng còn trong kho (Dưới kho)
-            df_avail = st.session_state.inventory[
-                (st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) & 
-                (st.session_state.inventory['Trạng_Thái_Luoi'] == "Dưới kho")
-            ].copy()
-            
-            if not df_avail.empty:
-                mau_inst = df_avail[['Số_Seri', 'Mã_TB', 'Loại_VT']].copy()
-                mau_inst['Nghiệp_Vụ'] = 'Lắp mới'
-                mau_inst['Tên_KH'] = ''
-                mau_inst['Địa_Chỉ'] = ''
-                mau_inst['Mã_Chì'] = ''
-                # Các cột cho Thay thế
-                mau_inst['Seri_Cũ_Thu_Hồi'] = ''
-                mau_inst['Model_Cũ'] = ''
-                mau_inst['Chỉ_Số_Chốt'] = ''
-                mau_inst['Lý_Do_Thay'] = ''
-                
-                st.download_button(
-                    f"📥 Tải danh sách {len(mau_inst)} thiết bị sẵn sàng lắp (.xlsx)", 
-                    get_sample_excel(mau_inst), 
-                    f"DS_Lap_Dat_{st.session_state.user_name}.xlsx"
-                )
-            else:
-                st.warning("Kho hết hàng khả dụng (Dưới kho).")
-
-            f_ht = st.file_uploader("Upload Excel Lắp đặt", type=["xlsx"], key="upl_excel_ht_v3")
-            if f_ht and st.button("🚀 Xử lý hàng loạt", key="btn_xl_excel_v3"):
-                try:
-                    df_up = pd.read_excel(f_ht)
-                    df_up.columns = [c.strip() for c in df_up.columns]
-                    
-                    # Ép kiểu Seri trong Excel
-                    if 'Số_Seri' in df_up.columns:
-                        df_up['Số_Seri'] = df_up['Số_Seri'].astype(str).str.strip()
-                    
-                    count_ok = 0
-                    errors = []
-                    
-                    for idx, row in df_up.iterrows():
-                        # Bỏ qua dòng trống Tên KH
-                        if pd.isna(row.get('Tên_KH')) or str(row.get('Tên_KH')).strip() == '':
-                            continue
-
-                        seri_moi = str(row['Số_Seri'])
-                        nghiep_vu = str(row['Nghiệp_Vụ']).lower()
-                        
-                        # So sánh chuỗi sạch
-                        mask_new = (st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) & \
-                                   (st.session_state.inventory['Số_Seri'].astype(str).str.strip() == seri_moi) & \
-                                   (st.session_state.inventory['Trạng_Thái_Luoi'] == "Dưới kho")
-                        found_idx = st.session_state.inventory[mask_new].index
-                        
-                        if found_idx.empty:
-                            errors.append(f"Seri {seri_moi}: Không có trong kho hoặc đã lắp.")
-                            continue
-                        
-                        i = found_idx[0]
-                        st.session_state.inventory.loc[i, 'Trạng_Thái_Luoi'] = "Đã đưa lên lưới"
-                        st.session_state.inventory.loc[i, 'Mục_Đích'] = f"KH: {row['Tên_KH']}"
-                        
-                        ma_chi = str(row.get('Mã_Chì', 'Chưa nhập'))
-                        if ma_chi == 'nan': ma_chi = 'Chưa nhập'
-                        
-                        detail_note = f"Đ/c: {row.get('Địa_Chỉ','')}. [Chì: {ma_chi}]. "
-                        
-                        if "thay" in nghiep_vu:
-                            seri_cu = str(row.get('Seri_Cũ_Thu_Hồi', ''))
-                            if not seri_cu or seri_cu == 'nan':
-                                errors.append(f"Seri {seri_moi}: Nghiệp vụ Thay thế nhưng thiếu Seri cũ.")
-                                continue
-                            
-                            detail_note += f"Thay cho: {seri_cu}"
-                            thu_hoi_row = pd.DataFrame([{
-                                'ID_He_Thong': f"TH-EX-{uuid.uuid4().hex[:6]}", 'Năm_SX': "Thu hồi", 'Loại_VT': str(row.get('Loại_VT_Cũ', 'Công tơ')), 
-                                'Mã_TB': str(row.get('Model_Cũ', 'Thu hồi')), 'Số_Seri': seri_cu, 'Nhà_CC': "Lưới thu hồi", 
-                                'Nguồn_Nhap': f"KH: {row['Tên_KH']}", 'Vị_Trí_Kho': st.session_state.user_name, 
-                                'Trạng_Thái_Luoi': "Vật tư thu hồi", 'Mục_Đích': "Chờ kiểm định", 
-                                'Chi_Tiết_Vị_Trí': f"CS chốt: {row.get('Chỉ_Số_Chốt',0)}. Lý do: {row.get('Lý_Do_Thay','')}",
-                                'Thoi_Gian_Tao': get_vn_time(), 'Thoi_Gian_Cap_Phat': '---'
-                            }])
-                            st.session_state.inventory = pd.concat([st.session_state.inventory, thu_hoi_row], ignore_index=True)
-                        else:
-                            detail_note += "Lắp mới (Excel)"
-                        
-                        st.session_state.inventory.loc[i, 'Chi_Tiết_Vị_Trí'] = detail_note
-                        count_ok += 1
-
-                    if count_ok > 0:
-                        luu_nhat_ky("Hiện trường (Excel)", f"Đội {st.session_state.user_name} cập nhật {count_ok} thiết bị.")
-                        save_all()
-                        st.success(f"✅ Đã xử lý thành công {count_ok} dòng!")
-                        st.rerun()
-                    
-                    if errors:
-                        st.error(f"⚠️ Có lỗi tại {len(errors)} dòng:")
-                        st.write(errors)
-                        
-                except Exception as e:
-                    st.error(f"Lỗi file Excel: {e}")
 
     # --- TAB 3: GIỮ NGUYÊN ---
     with t3:
@@ -1699,6 +1587,7 @@ elif menu == "💾 Quản trị Dữ liệu":
             st.session_state.inventory, st.session_state.requests = load_data()
             st.success("Đã tải lại dữ liệu mới nhất từ Server!")
             st.rerun()
+
 
 
 
