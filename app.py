@@ -1019,47 +1019,70 @@ elif menu == "🛠️ Hiện trường (Seri)":
                         save_all()
                         st.success("✅ Thành công!"); st.balloons(); st.rerun()
 
-# === PHẦN 2: NẠP EXCEL (LOGIC PHÂN LOẠI NGHIỆP VỤ RÕ RÀNG) ===
+# === PHẦN 2: NẠP EXCEL (TÁCH 2 MẪU RIÊNG BIỆT) ===
         else:
-            st.info("💡 Quy tắc: Cột **'Nghiệp_Vụ'** quyết định cách xử lý.\n- Điền **'Lắp mới'**: Không cần điền thông tin cũ.\n- Điền **'Thay thế'**: BẮT BUỘC điền Seri cũ & Chỉ số chốt.")
+            st.info("💡 Bạn có thể chọn tải mẫu phù hợp với công việc để nhập liệu nhanh hơn.")
             
-            # 1. Tạo file mẫu chứa danh sách thiết bị đang có trong kho
+            # Lấy danh sách thiết bị khả dụng trong kho
             df_avail = st.session_state.inventory[
                 (st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) & 
                 (st.session_state.inventory['Trạng_Thái_Luoi'] == "Dưới kho")
             ].copy()
             
             if not df_avail.empty:
-                # Tạo khung file mẫu chuẩn
-                mau_inst = pd.DataFrame()
-                mau_inst['Số_Seri'] = df_avail['Số_Seri'] # Lấy sẵn seri trong kho ra
-                mau_inst['Mã_TB'] = df_avail['Mã_TB']
+                c_dl1, c_dl2 = st.columns(2)
                 
-                # Các cột bắt buộc nhập
-                mau_inst['Nghiệp_Vụ'] = 'Lắp mới' # Mặc định là lắp mới (User tự sửa thành 'Thay thế' nếu cần)
-                mau_inst['Tính_Chất'] = 'Lắp TCC' 
-                mau_inst['Tên_KH'] = ''
-                mau_inst['Địa_Chỉ'] = ''
-                mau_inst['Mã_Chì'] = ''
-                
-                # Các cột dành riêng cho Thay thế (Để trống)
-                mau_inst['Seri_Cũ_Thu_Hồi'] = '' # Bắt buộc nếu nghiệp vụ là Thay thế
-                mau_inst['Chỉ_Số_Chốt'] = 0
-                mau_inst['Lý_Do_Thay'] = ''
-                mau_inst['Loại_VT_Cũ'] = df_avail['Loại_VT'] # Gợi ý loại VT cũ giống loại mới
-                
-                st.download_button(
-                    f"📥 Tải file mẫu Lắp đặt/Thay thế (.xlsx)", 
-                    get_sample_excel(mau_inst), 
-                    f"KH_Su_Dung_{st.session_state.user_name}.xlsx"
-                )
+                # --- NÚT 1: TẢI MẪU LẮP MỚI (GỌN NHẸ) ---
+                with c_dl1:
+                    mau_moi = pd.DataFrame()
+                    mau_moi['Số_Seri'] = df_avail['Số_Seri']
+                    mau_moi['Mã_TB'] = df_avail['Mã_TB']
+                    mau_moi['Loại_VT'] = df_avail['Loại_VT']
+                    mau_moi['Nghiệp_Vụ'] = 'Lắp mới'
+                    mau_moi['Tính_Chất'] = 'Lắp KH sau TCC'
+                    mau_moi['Tên_KH'] = ''
+                    mau_moi['Địa_Chỉ'] = ''
+                    mau_moi['Mã_Chì'] = ''
+                    
+                    st.download_button(
+                        "📥 Tải Mẫu 1: Lắp Mới (.xlsx)",
+                        get_sample_excel(mau_moi),
+                        f"Mau_Lap_Moi_{st.session_state.user_name}.xlsx",
+                        use_container_width=True,
+                        help="Dùng cho phát triển khách hàng mới, không có thu hồi."
+                    )
+
+                # --- NÚT 2: TẢI MẪU THAY THẾ (ĐẦY ĐỦ) ---
+                with c_dl2:
+                    mau_thay = pd.DataFrame()
+                    mau_thay['Số_Seri'] = df_avail['Số_Seri']
+                    mau_thay['Mã_TB'] = df_avail['Mã_TB']
+                    mau_thay['Loại_VT'] = df_avail['Loại_VT']
+                    mau_thay['Nghiệp_Vụ'] = 'Thay thế'
+                    mau_thay['Tính_Chất'] = 'Lắp TCC' # Thường thay định kỳ là trạm công cộng
+                    mau_thay['Tên_KH'] = ''
+                    mau_thay['Địa_Chỉ'] = ''
+                    mau_thay['Mã_Chì'] = ''
+                    # Các cột bắt buộc cho thay thế
+                    mau_thay['Seri_Cũ_Thu_Hồi'] = ''
+                    mau_thay['Model_Cũ'] = ''
+                    mau_thay['Chỉ_Số_Chốt'] = 0
+                    mau_thay['Lý_Do_Thay'] = 'Thay định kỳ'
+                    
+                    st.download_button(
+                        "📥 Tải Mẫu 2: Thay Thế (.xlsx)",
+                        get_sample_excel(mau_thay),
+                        f"Mau_Thay_The_{st.session_state.user_name}.xlsx",
+                        use_container_width=True,
+                        help="Dùng cho thay định kỳ, thay sự cố (Có thu hồi)."
+                    )
             else:
                 st.warning("Kho hiện không có thiết bị 'Dưới kho' nào để lập kế hoạch.")
 
-            # 2. Upload file
-            f_ht = st.file_uploader("Upload Excel Kế hoạch", type=["xlsx"], key="upl_excel_lap_dat_v6")
+            # --- PHẦN XỬ LÝ UPLOAD (DÙNG CHUNG CHO CẢ 2 MẪU) ---
+            f_ht = st.file_uploader("Upload Excel Kế hoạch (Mẫu nào cũng được)", type=["xlsx"], key="upl_excel_lap_dat_v7")
             
-            if f_ht and st.button("🚀 Thực hiện Xử lý", key="btn_exec_lap_dat_v6"):
+            if f_ht and st.button("🚀 Thực hiện Xử lý", key="btn_exec_lap_dat_v7"):
                 try:
                     df_up = pd.read_excel(f_ht, dtype=str)
                     df_up.columns = [c.strip() for c in df_up.columns]
@@ -1068,51 +1091,48 @@ elif menu == "🛠️ Hiện trường (Seri)":
                     errors = []
                     
                     for idx, row in df_up.iterrows():
-                        # Bỏ qua nếu không có tên KH (coi như dòng thừa)
+                        # Bỏ qua nếu không có tên KH
                         if pd.isna(row.get('Tên_KH')) or str(row.get('Tên_KH')).strip() == '': continue
 
                         seri_moi = str(row['Số_Seri']).strip().replace(".0", "")
-                        # Chuẩn hóa nghiệp vụ về chữ thường để so sánh
                         nghiep_vu = str(row.get('Nghiệp_Vụ', 'Lắp mới')).lower()
                         
-                        # 1. Tìm thiết bị mới trong kho
+                        # 1. Tìm thiết bị trong kho
                         mask_new = (st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) & \
                                    (st.session_state.inventory['Số_Seri'].astype(str).str.strip() == seri_moi) & \
                                    (st.session_state.inventory['Trạng_Thái_Luoi'] == "Dưới kho")
                         found_idx = st.session_state.inventory[mask_new].index
                         
                         if found_idx.empty:
-                            errors.append(f"Dòng {idx+2} (Seri {seri_moi}): Không có trong kho hoặc đã lắp rồi.")
+                            errors.append(f"Dòng {idx+2} (Seri {seri_moi}): Không có trong kho hoặc đã lắp.")
                             continue
                         
                         i = found_idx[0]
                         
-                        # Lấy thông tin chung
+                        # Lấy thông tin
                         tc = str(row.get('Tính_Chất', 'Lắp mới'))
                         kh = str(row.get('Tên_KH', 'Unknown'))
                         dc = str(row.get('Địa_Chỉ', ''))
                         ma_chi = str(row.get('Mã_Chì', 'Chưa nhập')).replace("nan", "Chưa nhập")
                         
-                        # --- LOGIC XỬ LÝ THEO NGHIỆP VỤ ---
                         detail_note = ""
                         has_error_row = False
                         
-                        # TRƯỜNG HỢP A: THAY THẾ (BẮT BUỘC CÓ SERI CŨ)
+                        # --- XỬ LÝ THAY THẾ ---
                         if "thay" in nghiep_vu:
                             seri_cu = str(row.get('Seri_Cũ_Thu_Hồi', '')).strip().replace(".0", "")
                             
-                            # Kiểm tra kỹ: Nếu chọn thay thế mà quên nhập seri cũ
                             if not seri_cu or seri_cu == 'nan' or seri_cu == '':
-                                errors.append(f"Dòng {idx+2} (Seri {seri_moi}): Chọn 'Thay thế' nhưng thiếu 'Seri_Cũ_Thu_Hồi'.")
+                                errors.append(f"Dòng {idx+2} (Seri {seri_moi}): Chọn 'Thay thế' nhưng thiếu Seri cũ.")
                                 has_error_row = True
                             else:
                                 cs_chot = row.get('Chỉ_Số_Chốt', 0)
                                 ly_do = str(row.get('Lý_Do_Thay', 'Thay định kỳ'))
-                                lvt_cu = str(row.get('Loại_VT_Cũ', 'Công tơ'))
+                                lvt_cu = str(row.get('Loại_VT', 'Công tơ')) # Mặc định lấy loại VT mới áp cho cũ
                                 
                                 detail_note = f"Đ/c: {dc}. [Chì: {ma_chi}]. Thay cho: {seri_cu} ({ly_do})"
                                 
-                                # Tạo lệnh thu hồi tự động
+                                # Tạo lệnh thu hồi
                                 deadline = (datetime.datetime.now() + datetime.timedelta(days=7)).strftime("%d/%m/%Y")
                                 thu_hoi_row = pd.DataFrame([{
                                     'ID_He_Thong': f"TH-EX-{uuid.uuid4().hex[:6]}", 
@@ -1131,11 +1151,11 @@ elif menu == "🛠️ Hiện trường (Seri)":
                                 }])
                                 st.session_state.inventory = pd.concat([st.session_state.inventory, thu_hoi_row], ignore_index=True)
 
-                        # TRƯỜNG HỢP B: LẮP MỚI (KHÔNG CẦN SERI CŨ)
+                        # --- XỬ LÝ LẮP MỚI ---
                         else:
                             detail_note = f"Đ/c: {dc}. [Chì: {ma_chi}]. Lắp mới PTKH."
 
-                        # Nếu không lỗi dòng này thì cập nhật
+                        # Cập nhật nếu không lỗi
                         if not has_error_row:
                             st.session_state.inventory.loc[i, 'Trạng_Thái_Luoi'] = "Đã đưa lên lưới"
                             st.session_state.inventory.loc[i, 'Mục_Đích'] = f"{tc} - {kh}"
@@ -1143,19 +1163,17 @@ elif menu == "🛠️ Hiện trường (Seri)":
                             count_ok += 1
 
                     if count_ok > 0:
-                        luu_nhat_ky("Kế hoạch Excel", f"Đội {st.session_state.user_name} thực hiện {count_ok} lệnh (Lắp mới/Thay thế).")
+                        luu_nhat_ky("Kế hoạch Excel", f"Đội {st.session_state.user_name} thực hiện {count_ok} lệnh.")
                         save_all()
                         st.success(f"✅ Đã xử lý thành công {count_ok} dòng!")
                         st.balloons()
-                        
-                        # Hiển thị lại bảng để check
                         st.dataframe(st.session_state.inventory[
                             (st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) & 
                             (st.session_state.inventory['Trạng_Thái_Luoi'] == "Đã đưa lên lưới")
                         ].head(count_ok))
                     
                     if errors:
-                        st.error(f"⚠️ Có {len(errors)} dòng bị lỗi không thực hiện được:")
+                        st.error(f"⚠️ Có {len(errors)} dòng lỗi:")
                         st.write(errors)
                         
                 except Exception as e:
@@ -1701,6 +1719,7 @@ elif menu == "💾 Quản trị Dữ liệu":
             st.session_state.inventory, st.session_state.requests = load_data()
             st.success("Đã tải lại dữ liệu mới nhất từ Server!")
             st.rerun()
+
 
 
 
