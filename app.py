@@ -933,85 +933,132 @@ elif menu == "🛠️ Hiện trường (Seri)":
                 except Exception as e:
                     st.error(f"Lỗi: {e}")
                     
-    # --- TAB 2: QUẢN LÝ LẮP ĐẶT (UPDATE: ÉP KIỂU DỮ LIỆU) ---
+# --- TAB 2: QUẢN LÝ LẮP ĐẶT (GIAO DIỆN CHUẨN: CHÌ ĐI THEO CÔNG TƠ MỚI) ---
     with t2:
-        mode_t2 = st.radio("Chế độ nhập liệu:", ["✍️ Nhập thủ công (Từng cái)", "📁 Nạp Excel (Hàng loạt)"], horizontal=True, label_visibility="collapsed", key="radio_mode_v3")
+        mode_t2 = st.radio("Chế độ nhập liệu:", ["✍️ Nhập thủ công (Từng cái)", "📁 Nạp Excel (Hàng loạt)"], horizontal=True, label_visibility="collapsed", key="radio_mode_v4")
         
-        # === PHẦN 1: NHẬP THỦ CÔNG (Giữ nguyên) ===
+        # === PHẦN 1: NHẬP THỦ CÔNG ===
         if mode_t2 == "✍️ Nhập thủ công (Từng cái)":
-            c_mode, c_lvt = st.columns([1.5, 1])
-            with c_mode:
-                nghiep_vu = st.radio("Nghiệp vụ:", ["Lắp mới (Phát triển KH)", "Thay thế (Định kỳ/Đồng bộ/Sự cố)"], horizontal=True, key="radio_nv_v3")
-                is_thay_the = "Thay thế" in nghiep_vu
-            with c_lvt:
+            # 1. Chọn nghiệp vụ
+            nghiep_vu = st.radio("Chọn nghiệp vụ:", ["Lắp mới (Phát triển KH)", "Thay thế (Định kỳ/Đồng bộ/Sự cố)"], horizontal=True, key="radio_nv_v4")
+            is_thay_the = "Thay thế" in nghiep_vu
+
+            # 2. KHỐI CHỌN VẬT TƯ MỚI & MÃ CHÌ
+            with st.container(border=True):
+                st.subheader("🟦 1. Thông tin Thiết bị Mới & Mã Chì")
+                c1, c2, c3 = st.columns(3)
+                
+                # Lọc kho
                 df_kho_doi = st.session_state.inventory[(st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) & (st.session_state.inventory['Trạng_Thái_Luoi'] == "Dưới kho")]
                 lvt_list = df_kho_doi['Loại_VT'].unique()
-                lvt_chon = st.selectbox("Loại thiết bị lắp", lvt_list if len(lvt_list)>0 else ["(Kho trống)"], key="sb_lvt_v3")
                 
-            c3, c4 = st.columns(2)
-            with c3:
+                with c1: lvt_chon = st.selectbox("Loại VT", lvt_list if len(lvt_list)>0 else ["(Kho trống)"], key="sb_lvt_v4")
+                
                 models = df_kho_doi[df_kho_doi['Loại_VT'] == lvt_chon]['Mã_TB'].unique() if len(lvt_list)>0 else []
-                model_chon = st.selectbox("Chọn Model", models if len(models)>0 else ["(Hết hàng)"], key="sb_model_v3")
-            with c4:
-                seris = df_kho_doi[(df_kho_doi['Mã_TB'] == model_chon)]['Số_Seri'].unique() if model_chon != "(Hết hàng)" else []
-                seri_chon = st.selectbox("Chọn Số Seri lắp", seris if len(seris)>0 else ["(Hết hàng)"], key="sb_seri_v3")
+                with c2: model_chon = st.selectbox("Model/Chủng loại", models if len(models)>0 else ["(Hết)"], key="sb_mod_v4")
+                
+                seris = df_kho_doi[(df_kho_doi['Mã_TB'] == model_chon)]['Số_Seri'].unique() if model_chon != "(Hết)" else []
+                with c3: seri_chon = st.selectbox("Số Seri sẽ lắp", seris if len(seris)>0 else ["(Hết)"], key="sb_ser_v4")
 
-            st.write("---")
-            with st.form(key="form_thuc_hien_ht_v3"): 
-                st.subheader(f"📝 Phiếu thi công: {model_chon}")
+                st.divider()
                 
-                # Logic gợi ý chì (Giữ nguyên)
-                goi_y_chi = ["VN/N128_LA"] 
+                # --- LOGIC GỢI Ý MÃ CHÌ (NẰM NGAY DƯỚI THIẾT BỊ MỚI) ---
+                # Logic: Tự động nhận diện Mã Chì dựa trên Model đã chọn ở trên
+                goi_y_chi = ["VN/N128_LA"] # Mặc định
                 model_upper = str(model_chon).upper()
-                if any(x in model_upper for x in ["HHM", "DDS", "DTS", "DDZ"]): goi_y_chi = ["VN/N309_HHM", "VN/N128_LA"]
-                elif "VSE" in model_upper: goi_y_chi = ["VN/N306_VSE1", "VN/N128_LA"]
-                elif any(x in model_upper for x in ["CE-", "ME-", "PB", "TF"]): goi_y_chi = ["VN/N52", "VN/N128_LA", "VN/N370"]
-                elif "OVE" in model_upper: goi_y_chi = ["VN/N224_3", "VN/N224_4"]
-                elif "SF" in model_upper: goi_y_chi = ["VN/N370", "VN/N128_LA", "VN/N264_LA"]
-                elif any(x in model_upper for x in ["A1700", "A1140", "A1120", "ELSTER"]): goi_y_chi = ["VN/N370", "VN/N14", "VN/N128_LA"]
-                goi_y_chi.append("✍️ Nhập tay khác...")
                 
-                c_chi_1, c_chi_2 = st.columns(2)
-                with c_chi_1: chon_chi = st.selectbox("Mã chì kiểm định (Gợi ý)", goi_y_chi)
-                with c_chi_2: ma_chi_final = st.text_input("Nhập mã chì thực tế", placeholder="Vd: VN/N...") if chon_chi == "✍️ Nhập tay khác..." else chon_chi
+                if any(x in model_upper for x in ["HHM", "DDS", "DTS", "DDZ", "LINKTON"]):
+                    goi_y_chi = ["VN/N309_HHM", "VN/N128_LA", "VN/N139_TN"]
+                elif "VSE" in model_upper or "VINASINO" in model_upper:
+                    goi_y_chi = ["VN/N306_VSE1", "VN/N128_LA"]
+                elif any(x in model_upper for x in ["CE-", "ME-", "PB", "TF", "GELEX", "EMIC"]):
+                    goi_y_chi = ["VN/N52", "VN/N128_LA", "VN/N370"]
+                elif "OVE" in model_upper or "OMNI" in model_upper:
+                    goi_y_chi = ["VN/N224_3", "VN/N224_4"]
+                elif "SF" in model_upper or "PSMART" in model_upper:
+                    goi_y_chi = ["VN/N370", "VN/N128_LA", "VN/N264_LA"]
+                elif any(x in model_upper for x in ["A1700", "A1140", "A1120", "ELSTER"]):
+                    goi_y_chi = ["VN/N370", "VN/N14", "VN/N128_LA"]
                 
-                c_kh_1, c_kh_2 = st.columns(2)
-                kh_name = c_kh_1.text_input("Tên Khách hàng / Mã KH")
-                dia_chi = c_kh_2.text_input("Địa chỉ lắp đặt")
+                goi_y_chi.append("✍️ Nhập tay mã khác...")
                 
-                ly_do = "Lắp mới P.Triển KH"
-                old_seri, old_model, old_lvt, old_idx = None, None, None, 0
-                if is_thay_the:
-                    st.warning("🔄 Nhập thông tin THU HỒI:")
-                    rc1, rc2 = st.columns(2)
-                    old_lvt = rc1.selectbox("Loại VT cũ", list(DANM_MUC_NCC.keys()), index=0)
-                    old_model = rc2.text_input("Model cũ", placeholder="Vd: VSE11-2018")
-                    old_seri = rc1.text_input("Seri cũ (*Bắt buộc)")
-                    old_idx = rc2.number_input("Chỉ số chốt", min_value=0.0)
-                    ly_do = st.selectbox("Lý do thay", ["Thay định kỳ", "Thay đồng bộ", "Thay hư hỏng", "Khác"])
-                
-                if st.form_submit_button("🚀 Cập nhật"):
-                    if seri_chon == "(Hết hàng)" or not seri_chon: st.error("❌ Chưa chọn thiết bị mới!")
-                    elif is_thay_the and not old_seri: st.error("❌ Thiếu Seri cũ!")
-                    elif not ma_chi_final: st.error("❌ Chưa nhập mã chì!")
+                col_chi_1, col_chi_2 = st.columns([1, 2])
+                with col_chi_1:
+                    chon_chi_list = st.selectbox("Gợi ý Mã Chì:", goi_y_chi, help="Mã chì phụ thuộc vào chủng loại công tơ")
+                with col_chi_2:
+                    if chon_chi_list == "✍️ Nhập tay mã khác...":
+                        ma_chi_final = st.text_input("Nhập mã chì thực tế:", placeholder="Vd: VN/N...")
                     else:
+                        ma_chi_final = st.text_input("Mã chì xác nhận:", value=chon_chi_list) # Cho phép sửa lại nếu gợi ý chưa đúng ý
+            
+            # 3. KHỐI THÔNG TIN KHÁCH HÀNG
+            with st.form(key="form_ht_v4"):
+                st.subheader("👤 2. Thông tin Khách hàng")
+                c_kh_1, c_kh_2 = st.columns(2)
+                kh_name = c_kh_1.text_input("Tên Khách hàng / Mã KH", placeholder="Vd: Nguyễn Văn A - PB06...")
+                dia_chi = c_kh_2.text_input("Địa chỉ lắp đặt", placeholder="Vd: Ấp... Xã...")
+                
+                # 4. KHỐI THU HỒI (CHỈ HIỆN KHI THAY THẾ)
+                old_seri, old_model, old_lvt, old_idx = None, None, None, 0
+                ly_do = "Lắp mới P.Triển KH"
+                
+                if is_thay_the:
+                    st.warning("🟧 3. Thông tin Công tơ Cũ (Thu hồi)")
+                    rc1, rc2, rc3 = st.columns(3)
+                    old_lvt = rc1.selectbox("Loại VT cũ", list(DANM_MUC_NCC.keys()), index=0, key="old_lvt_v4")
+                    old_model = rc2.text_input("Model cũ", placeholder="Vd: VSE11")
+                    old_idx = rc3.number_input("Chỉ số chốt (kWh)", min_value=0.0, format="%.2f")
+                    
+                    rc4, rc5 = st.columns([1, 2])
+                    old_seri = rc4.text_input("Số Seri cũ (*Bắt buộc)")
+                    ly_do = rc5.selectbox("Lý do thay thế", ["Thay định kỳ", "Thay đồng bộ", "Thay hư hỏng", "Cháy nổ", "Khác"])
+
+                st.write("---")
+                # NÚT XÁC NHẬN CHUNG
+                if st.form_submit_button("🚀 Cập nhật Lên lưới"):
+                    # Validate dữ liệu
+                    if seri_chon == "(Hết)" or not seri_chon:
+                        st.error("❌ Chưa chọn thiết bị mới để lắp!")
+                    elif not ma_chi_final:
+                        st.error("❌ Chưa nhập Mã chì kiểm định!")
+                    elif is_thay_the and not old_seri:
+                        st.error("❌ Nghiệp vụ thay thế bắt buộc phải nhập Số Seri cũ!")
+                    else:
+                        # 1. Cập nhật thiết bị MỚI -> Lên lưới
                         idx_new = st.session_state.inventory[(st.session_state.inventory['Vị_Trí_Kho'] == st.session_state.user_name) & (st.session_state.inventory['Số_Seri'] == seri_chon)].index
                         st.session_state.inventory.loc[idx_new, 'Trạng_Thái_Luoi'] = "Đã đưa lên lưới"
                         st.session_state.inventory.loc[idx_new, 'Mục_Đích'] = f"KH: {kh_name}"
-                        st.session_state.inventory.loc[idx_new, 'Chi_Tiết_Vị_Trí'] = f"Đ/c: {dia_chi}. [Chì: {ma_chi_final}]. " + (f"Thay cho: {old_seri} ({ly_do})" if is_thay_the else "Lắp mới PTKH")
+                        # Lưu mã chì vào ghi chú
+                        detail_info = f"Đ/c: {dia_chi}. [Chì: {ma_chi_final}]. " + (f"Thay cho: {old_seri} ({ly_do})" if is_thay_the else "Lắp mới PTKH")
+                        st.session_state.inventory.loc[idx_new, 'Chi_Tiết_Vị_Trí'] = detail_info
                         
+                        # 2. Xử lý thiết bị CŨ (Nếu thay thế) -> Tạo dòng thu hồi
                         if is_thay_the:
                             deadline = (datetime.datetime.now() + datetime.timedelta(days=7)).strftime("%d/%m/%Y")
                             thu_hoi_row = pd.DataFrame([{
-                                'ID_He_Thong': f"TH-{uuid.uuid4().hex[:8].upper()}", 'Năm_SX': "Thu hồi", 'Loại_VT': old_lvt, 'Mã_TB': old_model, 'Số_Seri': old_seri, 'Nhà_CC': "Lưới thu hồi", 'Nguồn_Nhap': f"KH: {kh_name}", 'Vị_Trí_Kho': st.session_state.user_name, 'Trạng_Thái_Luoi': "Vật tư thu hồi", 'Mục_Đích': "Chờ kiểm định", 'Chi_Tiết_Vị_Trí': f"Hạn trả: {deadline} (CS: {old_idx}). Lý do: {ly_do}", 'Thoi_Gian_Tao': get_vn_time(), 'Thoi_Gian_Cap_Phat': '---'
+                                'ID_He_Thong': f"TH-{uuid.uuid4().hex[:8].upper()}", 
+                                'Năm_SX': "Thu hồi", 
+                                'Loại_VT': old_lvt, 
+                                'Mã_TB': old_model, 
+                                'Số_Seri': old_seri, 
+                                'Nhà_CC': "Lưới thu hồi", 
+                                'Nguồn_Nhap': f"KH: {kh_name}", 
+                                'Vị_Trí_Kho': st.session_state.user_name, 
+                                'Trạng_Thái_Luoi': "Vật tư thu hồi", 
+                                'Mục_Đích': "Chờ kiểm định", 
+                                'Chi_Tiết_Vị_Trí': f"Hạn trả: {deadline} (CS Chốt: {old_idx}). Lý do: {ly_do}", 
+                                'Thoi_Gian_Tao': get_vn_time(), 
+                                'Thoi_Gian_Cap_Phat': '---'
                             }])
                             st.session_state.inventory = pd.concat([st.session_state.inventory, thu_hoi_row], ignore_index=True)
-                            luu_nhat_ky("Thay thế", f"Lắp {seri_chon}, Thu hồi {old_seri}")
+                            luu_nhat_ky("Thay thế", f"Lắp {seri_chon} (Chì: {ma_chi_final}), Thu hồi {old_seri}")
                         else:
-                            luu_nhat_ky("Lắp mới", f"Lắp mới {seri_chon} cho {kh_name}")
+                            luu_nhat_ky("Lắp mới", f"Lắp mới {seri_chon} (Chì: {ma_chi_final}) cho {kh_name}")
+                        
                         save_all()
-                        st.success("✅ Thành công!"); st.rerun()
-
+                        st.success(f"✅ Đã cập nhật thành công thiết bị {seri_chon}!")
+                        st.balloons()
+                        st.rerun()
         # === PHẦN 2: NẠP EXCEL (LOGIC MỚI: ÉP KIỂU STRING) ===
         else:
             st.info("💡 Tải danh sách thiết bị 'DƯỚI KHO' về để điền thông tin lắp đặt.")
@@ -1658,6 +1705,7 @@ elif menu == "💾 Quản trị Dữ liệu":
             st.session_state.inventory, st.session_state.requests = load_data()
             st.success("Đã tải lại dữ liệu mới nhất từ Server!")
             st.rerun()
+
 
 
 
